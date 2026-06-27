@@ -1,0 +1,75 @@
+<button class="fab" id="fabBtn" type="button" aria-label="Mở bảng tổng hợp CTĐT">
+  <span>Quản lý học phần</span>
+</button>
+
+<template id="dashboardTemplate">
+  <div class="backdrop" id="backdrop">
+    <section class="panel" role="dialog" aria-modal="true" aria-labelledby="dashboardTitle">
+      <header class="panel-head">
+        <div>
+          <p class="eyebrow">CTT-SIS HUST</p>
+          <h2 id="dashboardTitle">Tiến độ học tập</h2>
+          <p class="sub">Dashboard tự động tổng hợp từ bảng Chương trình đào tạo trên trang hiện tại.</p>
+        </div>
+        <div class="btn-row">
+          <button class="icon-btn" id="rescanBtn" type="button" title="Quét lại">↻ <span>Quét lại</span></button>
+          <button class="icon-btn close-btn" id="closeBtn" type="button" title="Đóng">× <span>Đóng</span></button>
+        </div>
+      </header>
+
+      <main>
+        <section class="overview" aria-label="Tổng quan">
+          <article class="summary-card hero-stat">
+            <div id="gaugeSlot"></div>
+            <div>
+              <p class="label">CPA tích lũy</p>
+              <p class="caption">Tính theo trọng số tín chỉ và điểm hệ 4.</p>
+            </div>
+          </article>
+          <article class="summary-card">
+            <p class="label">Tín chỉ tích lũy</p>
+            <p class="metric"><span id="doneCredit">0</span> <small>TC</small></p>
+            <p class="caption"><span id="doneCreditCaption">0</span> tín chỉ đã qua trên <span id="trackedCreditCaption">0</span> tín chỉ cần hoàn thành.</p>
+          </article>
+          <article class="summary-card">
+            <p class="label">Còn thiếu để tốt nghiệp</p>
+            <p class="metric danger"><span id="missingCredit">0</span> <small>TC</small></p>
+            <p class="caption">Chưa gồm phần thiếu của mô đun chuyên ngành đã chọn.</p>
+          </article>
+        </section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <h3>Khối kiến thức</h3>
+            <span id="courseCount" class="soft-pill">0 môn</span>
+          </div>
+          <div class="card-grid" id="categoryGrid"></div>
+        </section>
+
+        <section class="section-block">
+          <div class="section-title">
+            <h3>Mô đun chuyên ngành</h3>
+            <span class="soft-pill">Bắt buộc</span>
+          </div>
+          <article class="module-panel">
+            <label class="select-label" for="moduleSelect">Chọn mô đun</label>
+            <select id="moduleSelect"></select>
+            <div id="moduleBody"></div>
+          </article>
+        </section>
+
+        <section class="section-block is-hidden" id="otherSection">
+          <div class="section-title">
+            <h3>Môn chưa phân loại</h3>
+            <span class="soft-pill">Kiểm tra thủ công</span>
+          </div>
+          <div id="otherBody"></div>
+        </section>
+      </main>
+
+      <footer class="note">
+        Phân loại dựa trên nội dung "Ghi chú loại HP". Sau khi đổi bộ lọc hoặc chương trình trên trang CTT-SIS, bấm "Quét lại" để cập nhật số liệu.
+      </footer>
+    </section>
+  </div>
+</template>
