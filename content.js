@@ -5,6 +5,7 @@
   const CODE_RE = /^[A-Z]{2,5}\d{3,5}$/;
   const SHOW_PROGRAM_BUTTON_ID =
     "ctl00_ctl00_contentPane_MainPanel_MainContent_btShowProgramCourse";
+  const LOGIN_PATH = "/Account/Login.aspx";
 
   const CAT_META = {
     dc: { name: "Đại cương", rule: "all" },
@@ -85,6 +86,57 @@
     return document.body && document.body.innerText.includes("Mã HP học");
   }
 
+  function marksPresent() {
+    return (
+      location.pathname.includes("StudentCourseMarks.aspx") ||
+      (document.body && document.body.innerText.includes("BẢNG ĐIỂM CÁ NHÂN"))
+    );
+  }
+
+  function scrapeMarks() {
+    const rows = [];
+    const seen = new Set();
+
+    document.querySelectorAll("tr").forEach((tr) => {
+      const cells = Array.from(tr.children)
+        .filter((el) => el.tagName === "TD" || el.tagName === "TH")
+        .map((td) => (td.innerText || "").trim().replace(/\s+/g, " "));
+      if (cells.length < 7) return;
+
+      const codeIndex = cells.findIndex((c) => CODE_RE.test(c));
+      if (codeIndex < 0) return;
+      const after = cells.slice(codeIndex);
+      const before = cells.slice(0, codeIndex).reverse();
+
+      const term = before.find((c) => /^\d{5}$/.test(c)) || cells[0] || "";
+      const code = after[0] || "";
+      const name = after[1] || "";
+      const credit = Number(after[2]) || 0;
+      const classCode = after[3] || "";
+      const processScore = after[4] === "" ? null : Number(after[4]);
+      const examScore = after[5] === "" ? null : Number(after[5]);
+      const letterGrade = after[6] || "";
+
+      if (!code || !name || !CODE_RE.test(code)) return;
+      const key = `${term}|${code}|${classCode}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      rows.push({
+        term,
+        code,
+        name,
+        credit,
+        classCode,
+        processScore: Number.isNaN(processScore) ? null : processScore,
+        examScore: Number.isNaN(examScore) ? null : examScore,
+        letterGrade,
+      });
+    });
+
+    return rows;
+  }
+
   function showProgramButton() {
     return document.getElementById(SHOW_PROGRAM_BUTTON_ID);
   }
@@ -98,6 +150,10 @@
     if (!btn) return false;
     btn.click();
     return true;
+  }
+
+  function isLoginPage() {
+    return location.pathname.toLowerCase() === LOGIN_PATH.toLowerCase();
   }
 
   function parseModuleTags(text) {
@@ -201,7 +257,9 @@
     catMeta: CAT_META,
     mandatoryKeys: MANDATORY_KEYS,
     buildModel,
+    scrapeMarks,
     gridPresent,
+    marksPresent,
     showProgramButtonPresent,
     clickShowProgramButton,
   };
@@ -209,15 +267,30 @@
   let tries = 0;
   const poll = setInterval(() => {
     tries++;
-    if (gridPresent() || showProgramButtonPresent()) {
-      if (window.CTTBK_UI) {
+    if (document.body) {
+      if (window.CTTBK_UI && !isLoginPage()) {
         window.CTTBK_UI.addFab();
+        const target = sessionStorage.getItem("cttbk_open_target");
+        if (
+          target === "marks" &&
+          marksPresent()
+        ) {
+          sessionStorage.removeItem("cttbk_open_target");
+          window.CTTBK_UI.openPanel("marks");
+        }
+        if (
+          target === "courses" &&
+          (gridPresent() || showProgramButtonPresent())
+        ) {
+          sessionStorage.removeItem("cttbk_open_target");
+          window.CTTBK_UI.openPanel("courses");
+        }
         if (
           gridPresent() &&
           sessionStorage.getItem("cttbk_auto_open") === "1"
         ) {
           sessionStorage.removeItem("cttbk_auto_open");
-          window.CTTBK_UI.openPanel();
+          window.CTTBK_UI.openPanel("courses");
         }
       }
       clearInterval(poll);

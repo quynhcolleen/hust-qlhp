@@ -1,6 +1,11 @@
-<button class="fab" id="fabBtn" type="button" aria-label="Mở bảng tổng hợp CTĐT">
-  <span>Quản lý học phần</span>
-</button>
+<div class="fab-stack" id="fabStack">
+  <button class="fab" id="courseFabBtn" type="button" aria-label="Mở quản lý học phần">
+    <span>Quản lý học phần</span>
+  </button>
+  <button class="fab fab-secondary" id="marksFabBtn" type="button" aria-label="Mở quản lý điểm số">
+    <span>Quản lý điểm số</span>
+  </button>
+</div>
 
 <template id="loadingTemplate">
   <div class="backdrop" id="backdrop">
@@ -19,6 +24,71 @@
         <div class="spinner" aria-hidden="true"></div>
         <p>Vui lòng chờ trong giây lát.</p>
       </div>
+    </section>
+  </div>
+</template>
+
+<template id="marksTemplate">
+  <div class="backdrop" id="backdrop">
+    <section class="panel" role="dialog" aria-modal="true" aria-labelledby="marksTitle">
+      <header class="panel-head">
+        <div>
+          <p class="eyebrow">CTT-SIS HUST</p>
+          <h2 id="marksTitle">Xếp hạng điểm học phần</h2>
+          <p class="sub">Dữ liệu được quét trực tiếp từ bảng điểm cá nhân hiện tại.</p>
+        </div>
+        <div class="btn-row">
+          <button class="icon-btn" id="marksBestBtn" type="button">Tốt nhất</button>
+          <button class="icon-btn" id="marksWorstBtn" type="button">Tệ nhất</button>
+          <button class="icon-btn close-btn" id="closeBtn" type="button" title="Đóng">× <span>Đóng</span></button>
+        </div>
+      </header>
+
+      <section class="overview marks-overview" aria-label="Tổng quan điểm">
+        <article class="summary-card">
+          <p class="label">Số học phần</p>
+          <p class="metric"><span id="marksCount">0</span></p>
+          <p class="caption">Danh sách này được cập nhật theo dữ liệu hiện có trên CTT-SIS.</p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Điểm tốt nhất</p>
+          <p class="metric"><span id="bestGrade">-</span></p>
+          <p class="caption" id="bestCourse">Chưa có dữ liệu.</p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Cần chú ý</p>
+          <p class="metric danger"><span id="worstGrade">-</span></p>
+          <p class="caption" id="worstCourse">Chưa có dữ liệu.</p>
+        </article>
+      </section>
+
+      <section class="section-block">
+        <div class="section-title">
+          <h3>Danh sách học phần</h3>
+          <span class="soft-pill" id="marksSortLabel">Tốt nhất trước</span>
+        </div>
+        <div class="marks-table-wrap">
+          <table class="course-list marks-table">
+            <thead>
+              <tr>
+                <th>Học kỳ</th>
+                <th>Mã HP</th>
+                <th>Tên học phần</th>
+                <th class="credit-head">TC</th>
+                <th>Điểm QT</th>
+                <th>Điểm thi</th>
+                <th>Điểm chữ</th>
+                <th>Điểm số</th>
+              </tr>
+            </thead>
+            <tbody id="marksBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="note">
+        Nội dung bảng điểm có thể thay đổi theo thời gian. Extension luôn quét dữ liệu đang hiển thị trên trang, không dùng danh sách học phần cố định.
+      </footer>
     </section>
   </div>
 </template>

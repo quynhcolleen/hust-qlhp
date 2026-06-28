@@ -5,9 +5,12 @@
   let hostEl;
   let shadow;
   let panelOpen = false;
+  let currentPanelMode = null;
   let assetsPromise;
   let selectedModule = null;
   let copyHandlerBound = false;
+  const PROGRAM_PATH = '/Students/StudentProgram.aspx';
+  const MARKS_PATH = '/Students/StudentCourseMarks.aspx';
 
   function fmt(n) {
     return (Math.round(n * 100) / 100).toString();
@@ -91,6 +94,62 @@
         ${showCredit ? `<td class="credit">${escapeHTML(c.credit || 0)}</td>` : ''}
         ${showGrades ? `<td class="grade-cell">${gradeText(c.grade)}</td><td class="grade-cell">${scoreText(c)}</td>` : ''}
       </tr>`).join('')}</tbody></table>`;
+  }
+
+  function gradeRank(letter) {
+    const point = gradePoint(letter);
+    return point == null ? -2 : point;
+  }
+
+  function gradePoint(letter) {
+    const grade = String(letter || '').trim().toUpperCase();
+    return {
+      'A+': 4,
+      A: 4,
+      'B+': 3.5,
+      B: 3,
+      'C+': 2.5,
+      C: 2,
+      'D+': 1.5,
+      D: 1,
+      F: 0,
+    }[grade] ?? null;
+  }
+
+  function gradeBadge(letter) {
+    const grade = String(letter || '-').trim().toUpperCase() || '-';
+    const cls = grade.replace('+', 'plus').toLowerCase();
+    const known = ['a', 'aplus', 'b', 'bplus', 'c', 'cplus', 'd', 'dplus', 'f', 'r'].includes(cls);
+    return `<span class="grade-badge grade-${known ? cls : 'unknown'}">${escapeHTML(grade)}</span>`;
+  }
+
+  function summaryGrade(letter) {
+    const grade = String(letter || '-').trim().toUpperCase() || '-';
+    const cls = grade.replace('+', 'plus').toLowerCase();
+    const known = ['a', 'aplus', 'b', 'bplus', 'c', 'cplus', 'd', 'dplus', 'f', 'r'].includes(cls);
+    return `<span class="summary-grade grade-${known ? cls : 'unknown'}">${escapeHTML(grade)}</span>`;
+  }
+
+  function gradePointText(letter) {
+    const point = gradePoint(letter);
+    return point == null ? '-' : escapeHTML(point);
+  }
+
+  function markScoreText(value) {
+    return value == null || Number.isNaN(value) ? '-' : escapeHTML(value);
+  }
+
+  function sortMarks(rows, direction) {
+    const sign = direction === 'worst' ? 1 : -1;
+    return rows.slice().sort((a, b) => {
+      const rankDiff = gradeRank(a.letterGrade) - gradeRank(b.letterGrade);
+      if (rankDiff) return rankDiff * sign;
+      const examDiff = (a.examScore ?? -1) - (b.examScore ?? -1);
+      if (examDiff) return examDiff * sign;
+      const processDiff = (a.processScore ?? -1) - (b.processScore ?? -1);
+      if (processDiff) return processDiff * sign;
+      return a.name.localeCompare(b.name, 'vi');
+    });
   }
 
   function arcPath(cx, cy, r, a0, a1) {
@@ -304,6 +363,46 @@
     }
   }
 
+  function fillMarks(rows, direction) {
+    const sorted = sortMarks(rows, direction);
+    const best = sortMarks(rows, 'best')[0];
+    const worst = sortMarks(rows, 'worst')[0];
+
+    shadow.getElementById('marksCount').textContent = rows.length;
+    shadow.getElementById('bestGrade').innerHTML = best ? summaryGrade(best.letterGrade) : '-';
+    shadow.getElementById('bestCourse').textContent = best ? `${best.code} - ${best.name}` : 'Chưa có dữ liệu.';
+    shadow.getElementById('worstGrade').innerHTML = worst ? summaryGrade(worst.letterGrade) : '-';
+    shadow.getElementById('worstCourse').textContent = worst ? `${worst.code} - ${worst.name}` : 'Chưa có dữ liệu.';
+    shadow.getElementById('marksSortLabel').textContent = direction === 'worst' ? 'Tệ nhất trước' : 'Tốt nhất trước';
+    shadow.getElementById('marksBody').innerHTML = sorted.map(row => `
+      <tr>
+        <td class="grade-cell">${escapeHTML(row.term)}</td>
+        <td class="code">${escapeHTML(row.code)}</td>
+        <td>${escapeHTML(row.name)}</td>
+        <td class="credit">${escapeHTML(row.credit || 0)}</td>
+        <td class="grade-cell">${markScoreText(row.processScore)}</td>
+        <td class="grade-cell">${markScoreText(row.examScore)}</td>
+        <td class="grade-cell">${gradeBadge(row.letterGrade)}</td>
+        <td class="grade-cell">${gradePointText(row.letterGrade)}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function renderMarksPanel(rows) {
+    let currentSort = 'best';
+    await renderTemplate('marksTemplate');
+    fillMarks(rows, currentSort);
+    bindPanelShellEvents();
+    shadow.getElementById('marksBestBtn').addEventListener('click', () => {
+      currentSort = 'best';
+      fillMarks(rows, currentSort);
+    });
+    shadow.getElementById('marksWorstBtn').addEventListener('click', () => {
+      currentSort = 'worst';
+      fillMarks(rows, currentSort);
+    });
+  }
+
   async function renderTemplate(templateId) {
     const { css, html } = await loadAssets();
     shadow.innerHTML = `<style>${css}</style>${html}`;
@@ -375,6 +474,7 @@
   function closePanel() {
     if (shadow) shadow.innerHTML = '';
     panelOpen = false;
+    currentPanelMode = null;
   }
 
   function waitForGrid(timeoutMs) {
@@ -404,9 +504,25 @@
     return ready;
   }
 
-  async function openPanel() {
+  function openTarget(target) {
+    const path = target === 'marks' ? MARKS_PATH : PROGRAM_PATH;
+    if (location.pathname !== path) {
+      sessionStorage.setItem('cttbk_open_target', target);
+      location.href = `${location.origin}${path}`;
+      return;
+    }
+    openPanel(target);
+  }
+
+  async function openPanel(target) {
     ensureHost();
     panelOpen = true;
+    const mode = target || (window.CTTBK_DATA.marksPresent() ? 'marks' : 'courses');
+    currentPanelMode = mode;
+    if (mode === 'marks') {
+      await renderMarksPanel(window.CTTBK_DATA.scrapeMarks());
+      return;
+    }
     await renderLoadingPanel();
     const ready = await ensureProgramGrid();
     if (!panelOpen) return;
@@ -428,12 +544,16 @@
     const fabShadow = fabHost.attachShadow({ mode: 'open' });
     const doc = new DOMParser().parseFromString(html, 'text/html');
     fabShadow.innerHTML = `<style>${css}</style>`;
-    fabShadow.appendChild(doc.getElementById('fabBtn'));
-    fabShadow.getElementById('fabBtn').addEventListener('click', () => {
-      if (panelOpen) closePanel();
-      else openPanel();
+    fabShadow.appendChild(doc.getElementById('fabStack'));
+    fabShadow.getElementById('courseFabBtn').addEventListener('click', () => {
+      if (panelOpen && currentPanelMode === 'courses') closePanel();
+      else openTarget('courses');
+    });
+    fabShadow.getElementById('marksFabBtn').addEventListener('click', () => {
+      if (panelOpen && currentPanelMode === 'marks') closePanel();
+      else openTarget('marks');
     });
   }
 
-  window.CTTBK_UI = { addFab, openPanel };
+  window.CTTBK_UI = { addFab, openPanel, openTarget };
 })();

@@ -28,6 +28,9 @@ coverage/
 # Packaged extension archives
 *.zip
 *.crx
+
+# Local scrape/debug samples
+temp.json
 .codex
 .codex/*
 .agents

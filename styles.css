@@ -430,6 +430,108 @@ details[open] summary::before {
   white-space: nowrap;
 }
 
+.marks-overview {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.marks-table-wrap {
+  overflow-x: auto;
+}
+
+.marks-table {
+  min-width: 860px;
+}
+
+.summary-grade {
+  display: inline-block;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.grade-badge {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 34px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.grade-a,
+.grade-aplus {
+  color: #087333;
+  background: #E7F7ED;
+}
+
+.summary-grade.grade-a,
+.summary-grade.grade-aplus {
+  color: #087333;
+  background: transparent;
+}
+
+.grade-b,
+.grade-bplus {
+  color: #0B579F;
+  background: #EAF3FF;
+}
+
+.summary-grade.grade-b,
+.summary-grade.grade-bplus {
+  color: #0B579F;
+  background: transparent;
+}
+
+.grade-c,
+.grade-cplus {
+  color: #8A5A00;
+  background: #FFF4D8;
+}
+
+.summary-grade.grade-c,
+.summary-grade.grade-cplus {
+  color: #8A5A00;
+  background: transparent;
+}
+
+.grade-d,
+.grade-dplus {
+  color: #A33B00;
+  background: #FFECDD;
+}
+
+.summary-grade.grade-d,
+.summary-grade.grade-dplus {
+  color: #A33B00;
+  background: transparent;
+}
+
+.grade-f,
+.grade-r {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+.summary-grade.grade-f,
+.summary-grade.grade-r {
+  color: var(--red);
+  background: transparent;
+}
+
+.grade-unknown {
+  color: var(--muted);
+  background: #F0EEEE;
+}
+
+.summary-grade.grade-unknown {
+  color: var(--muted);
+  background: transparent;
+}
+
 .pass-row {
   display: flex;
   flex-wrap: wrap;
@@ -486,11 +588,17 @@ select {
   border-top: 1px solid var(--line);
 }
 
-.fab {
+.fab-stack {
   position: fixed;
   right: 22px;
   bottom: 22px;
   z-index: 2147483647;
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.fab {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -507,6 +615,18 @@ select {
 
 .fab:hover {
   background: var(--red-dark);
+}
+
+.fab-secondary {
+  color: var(--red);
+  background: #FFFFFF;
+  border-color: #D7C7C7;
+}
+
+.fab-secondary:hover {
+  color: #FFFFFF;
+  background: var(--red);
+  border-color: var(--red);
 }
 
 svg text {
@@ -557,7 +677,7 @@ svg text {
     flex-direction: column;
   }
 
-  .fab {
+  .fab-stack {
     right: 14px;
     bottom: 14px;
   }

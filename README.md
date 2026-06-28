@@ -1,90 +1,105 @@
-# Hướng dẫn cài đặt và sử dụng tool quản lý học phần
+# Quản lý học phần HUST
 
-Tiện ích Chrome này hỗ trợ sinh viên HUST xem nhanh tiến độ học tập từ trang **Chương trình đào tạo** trên CTT-SIS.
+Chrome extension hỗ trợ sinh viên HUST theo dõi tiến độ học tập trực tiếp trên CTT-SIS.
 
-Tool sẽ đọc bảng học phần trên trang hiện tại, sau đó hiển thị dashboard gồm CPA, số tín chỉ đã tích lũy, tín chỉ còn thiếu, các khối kiến thức, mô đun chuyên ngành và điểm của các học phần đã qua.
+Tiện ích đọc dữ liệu đang hiển thị trên các trang CTT-SIS, sau đó tạo dashboard để xem nhanh CPA, tín chỉ tích lũy, học phần còn thiếu, mô đun chuyên ngành và bảng điểm cá nhân.
 
-## 1. Tải source code về máy
+## Tính năng
 
-### Cách 1: Clone từ GitHub
+- Tổng hợp chương trình đào tạo từ trang CTT-SIS.
+- Tính CPA theo điểm hệ 4 và trọng số tín chỉ.
+- Hiển thị tín chỉ đã tích lũy, tín chỉ yêu cầu và tín chỉ còn thiếu.
+- Phân loại học phần theo các khối kiến thức: đại cương, lý luận chính trị, giáo dục thể chất, quốc phòng, ngoại ngữ, cơ sở ngành, thực tập, đồ án và mô đun chuyên ngành.
+- Cho phép chọn mô đun chuyên ngành và ghi nhớ lựa chọn gần nhất.
+- Liệt kê học phần đã qua, học phần còn thiếu và học phần có thể chọn.
+- Copy nhanh mã học phần chưa học.
+- Xếp hạng bảng điểm cá nhân theo điểm tốt nhất hoặc cần chú ý nhất.
+- Hiển thị điểm chữ A+, A, B+, B, C+, C, D+, D, F/R và điểm hệ 4 tương ứng.
 
-Mở Terminal / Command Prompt và chạy lệnh:
+Tiện ích không hiển thị nút nổi ở trang đăng nhập CTT-SIS.
+
+## Cài đặt
+
+1. Tải source code về máy bằng một trong hai cách:
 
 ```bash
 git clone https://github.com/quynhcolleen/hust-dghp.git
 ```
 
-Sau khi clone xong, bạn sẽ có một thư mục chứa source code của tiện ích.
+Hoặc tải ZIP từ GitHub rồi giải nén.
 
-### Cách 2: Tải file ZIP
-
-1. Truy cập trang GitHub của repository.
-2. Nhấn **Code**.
-3. Chọn **Download ZIP**.
-4. Giải nén file ZIP ra một thư mục bất kỳ.
-
-## 2. Cài đặt tiện ích vào Chrome
-
-1. Mở trình duyệt Google Chrome.
-2. Truy cập đường dẫn:
+2. Mở Chrome và truy cập:
 
 ```text
 chrome://extensions
 ```
 
-3. Bật **Chế độ dành cho nhà phát triển** ở góc trên bên phải.
-4. Nhấn **Tải tiện ích đã giải nén** / **Load unpacked**.
-5. Chọn thư mục source code vừa clone hoặc vừa giải nén.
-6. Kiểm tra tiện ích đã xuất hiện trong danh sách extensions.
+3. Bật **Developer mode** / **Chế độ dành cho nhà phát triển**.
+4. Chọn **Load unpacked** / **Tải tiện ích đã giải nén**.
+5. Chọn thư mục source code của extension.
+6. Refresh lại trang CTT-SIS nếu trang đang mở sẵn.
 
-## 3. Cách sử dụng
+## Cách sử dụng
 
-1. Đăng nhập CTT-SIS.
-2. Mở trang **Chương trình đào tạo**:
+Đăng nhập CTT-SIS, sau đó mở một trang bất kỳ trong domain:
+
+```text
+https://ctt-sis.hust.edu.vn/
+```
+
+Ở góc dưới bên phải sẽ có hai nút:
+
+- **Quản lý học phần**: mở trang Chương trình đào tạo và hiển thị dashboard tiến độ.
+- **Quản lý điểm số**: mở trang Bảng điểm cá nhân và hiển thị bảng xếp hạng điểm.
+
+Các đường dẫn chính:
 
 ```text
 https://ctt-sis.hust.edu.vn/Students/StudentProgram.aspx
+https://ctt-sis.hust.edu.vn/Students/StudentCourseMarks.aspx
 ```
 
-3. Đợi bảng học phần tải xong.
-4. Nhấn nút **Quản lý học phần** ở góc dưới bên phải màn hình.
-5. Xem tiến độ học tập trong dashboard.
+Nếu đang ở trang khác trong CTT-SIS, extension sẽ tự chuyển đến đúng trang khi bạn bấm nút tương ứng.
 
-Nếu bạn thay đổi bộ lọc hoặc trang CTT-SIS cập nhật dữ liệu, nhấn **Quét lại** trong dashboard để lấy dữ liệu mới.
+Trong dashboard học phần, dùng **Quét lại** khi bạn vừa đổi bộ lọc, CTT-SIS vừa tải thêm dữ liệu, hoặc muốn đọc lại nội dung mới nhất trên trang.
 
-## 4. Các chức năng chính
+## Cách extension đọc dữ liệu
 
-- Hiển thị CPA tích lũy theo điểm hệ 4.
-- Hiển thị tổng tín chỉ đã tích lũy.
-- Thống kê các khối kiến thức bắt buộc và tự chọn.
-- Nhận diện các học phần Giáo dục Quốc phòng - An ninh, Giáo dục thể chất, Tiếng Anh, thực tập, đồ án và mô đun chuyên ngành.
-- Xem điểm chữ và điểm số của các học phần đã qua.
-- Xem các học phần còn thiếu hoặc các học phần có thể chọn.
-- Copy nhanh mã học phần đối với các học phần chưa học.
+Extension quét trực tiếp bảng HTML đang hiển thị trên CTT-SIS. Dữ liệu không được hardcode và không được lưu thành bản sao cố định.
 
-## 5. Cập nhật sau khi chỉnh sửa code
+Việc phân loại học phần dựa trên:
 
-Sau khi sửa file trong source code:
+- Mã học phần.
+- Tên học phần.
+- Ghi chú trong bảng chương trình đào tạo.
+- Nhóm/loại học phần nếu CTT-SIS hiển thị.
+- Thông tin viện/khoa khi cần thiết.
 
-1. Vào lại:
+Nếu CTT-SIS thay đổi cấu trúc bảng hoặc đổi nhãn dữ liệu, phần quét và phân loại trong `content.js` có thể cần cập nhật.
 
-```text
-chrome://extensions
-```
+## Cập nhật sau khi sửa code
 
-2. Nhấn nút reload của tiện ích.
-3. Refresh lại trang CTT-SIS.
-4. Mở lại dashboard bằng nút **Quản lý học phần**.
+Sau khi chỉnh sửa source:
 
-## 6. Cấu trúc thư mục
+1. Mở lại `chrome://extensions`.
+2. Bấm reload extension.
+3. Refresh trang CTT-SIS.
+4. Mở lại dashboard bằng nút nổi.
 
-- `manifest.json`: cấu hình extension Chrome.
-- `content.js`: đọc bảng học phần và phân loại dữ liệu.
-- `ui.js`: xử lý dashboard, nút bấm, chọn mô đun và copy mã học phần.
-- `panel.html`: khung HTML của dashboard.
-- `styles.css`: giao diện light mode của dashboard.
-- `README.md`: hướng dẫn cài đặt và sử dụng.
+## Cấu trúc source
 
-## 7. Lưu ý
+- `manifest.json`: cấu hình Chrome extension.
+- `content.js`: bootstrap content script, quét dữ liệu CTT-SIS và phân loại học phần.
+- `ui.js`: điều hướng trang, dựng dashboard, xử lý nút bấm và bảng điểm.
+- `panel.html`: template HTML cho nút nổi, dashboard học phần và dashboard điểm.
+- `styles.css`: toàn bộ style của extension.
+- `logo*.png`: icon extension theo nhiều kích thước.
 
-Tool phân loại học phần dựa trên nội dung bảng và phần ghi chú trên CTT-SIS. Nếu CTT-SIS thay đổi cấu trúc bảng, phần đọc dữ liệu trong `content.js` có thể cần được cập nhật.
+## Quyền truy cập
+
+Extension chỉ khai báo quyền:
+
+- `storage`: lưu lựa chọn mô đun chuyên ngành gần nhất.
+- `https://ctt-sis.hust.edu.vn/*`: chạy content script trên CTT-SIS.
+
+Không có backend riêng và không gửi dữ liệu học tập ra server ngoài.
