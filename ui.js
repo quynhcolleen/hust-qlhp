@@ -173,8 +173,8 @@
     return `<svg width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="CPA ${fmt(cpa)} trên 4.0">
       <path d="${arcPath(cx, cy, r, start, end)}" fill="none" stroke="#EEE8E8" stroke-width="10" stroke-linecap="round"/>
       <path d="${arcPath(cx, cy, r, start, fillEnd)}" fill="none" stroke="#9C1010" stroke-width="10" stroke-linecap="round"/>
-      <text x="64" y="61" text-anchor="middle" font-weight="800" font-size="28" fill="#101010">${fmt(cpa)}</text>
-      <text x="64" y="84" text-anchor="middle" font-size="15" font-weight="800" fill="#666666">/ 4.0</text>
+      <text x="64" y="61" text-anchor="middle" font-weight="700" font-size="28" fill="#101010">${fmt(cpa)}</text>
+      <text x="64" y="84" text-anchor="middle" font-size="15" font-weight="700" fill="#666666">/ 4.0</text>
     </svg>`;
   }
 

@@ -60,7 +60,7 @@
   margin: 0 0 8px;
   color: var(--red);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -188,7 +188,7 @@ summary {
   margin: 12px 0 8px;
   color: var(--ink);
   font-size: 42px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
 }
 
@@ -291,7 +291,7 @@ summary {
   padding: 5px 10px;
   border-radius: 999px;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -312,7 +312,7 @@ details {
 summary {
   color: var(--red);
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   list-style: none;
 }
 
@@ -345,7 +345,7 @@ details[open] summary::before {
 .course-list th {
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   text-align: left;
   text-transform: uppercase;
 }
@@ -357,7 +357,7 @@ details[open] summary::before {
 .code {
   width: 88px;
   color: var(--red);
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -459,7 +459,7 @@ details[open] summary::before {
   padding: 4px 9px;
   border-radius: 999px;
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .grade-a,
@@ -546,7 +546,7 @@ details[open] summary::before {
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .empty-note {
@@ -610,7 +610,7 @@ select {
   border-radius: 999px;
   box-shadow: 0 10px 26px rgba(156, 16, 16, 0.32);
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .fab:hover {
