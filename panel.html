@@ -2,6 +2,27 @@
   <span>Quản lý học phần</span>
 </button>
 
+<template id="loadingTemplate">
+  <div class="backdrop" id="backdrop">
+    <section class="panel loading-panel" role="dialog" aria-modal="true" aria-labelledby="loadingTitle">
+      <header class="panel-head">
+        <div>
+          <p class="eyebrow">CTT-SIS HUST</p>
+          <h2 id="loadingTitle">Đang tải học phần</h2>
+          <p class="sub">Đang mở bảng Chương trình đào tạo và tổng hợp dữ liệu.</p>
+        </div>
+        <div class="btn-row">
+          <button class="icon-btn close-btn" id="closeBtn" type="button" title="Đóng">× <span>Đóng</span></button>
+        </div>
+      </header>
+      <div class="loading-state">
+        <div class="spinner" aria-hidden="true"></div>
+        <p>Vui lòng chờ trong giây lát.</p>
+      </div>
+    </section>
+  </div>
+</template>
+
 <template id="dashboardTemplate">
   <div class="backdrop" id="backdrop">
     <section class="panel" role="dialog" aria-modal="true" aria-labelledby="dashboardTitle">

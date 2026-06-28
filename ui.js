@@ -7,6 +7,7 @@
   let panelOpen = false;
   let assetsPromise;
   let selectedModule = null;
+  let copyHandlerBound = false;
 
   function fmt(n) {
     return (Math.round(n * 100) / 100).toString();
@@ -52,6 +53,11 @@
     return value == null || value === '' || Number.isNaN(value) ? '-' : escapeHTML(value);
   }
 
+  function scoreText(course) {
+    if (!course.credit) return '-';
+    return gradeText(course.score);
+  }
+
   function codeCell(course) {
     const code = escapeHTML(course.code);
     if (course.taken) return `<td class="code">${code}</td>`;
@@ -83,7 +89,7 @@
         ${codeCell(c)}
         <td>${escapeHTML(c.name)}</td>
         ${showCredit ? `<td class="credit">${escapeHTML(c.credit || 0)}</td>` : ''}
-        ${showGrades ? `<td class="grade-cell">${gradeText(c.grade)}</td><td class="grade-cell">${gradeText(c.score)}</td>` : ''}
+        ${showGrades ? `<td class="grade-cell">${gradeText(c.grade)}</td><td class="grade-cell">${scoreText(c)}</td>` : ''}
       </tr>`).join('')}</tbody></table>`;
   }
 
@@ -154,18 +160,31 @@
     let requiredCredit = 0;
     let missingCredit = 0;
 
+    function requiredCreditsFor(meta, courses) {
+      if (meta.rule === 'all') return courses.reduce((s, c) => s + (c.credit || 0), 0);
+      return courses
+        .map(c => c.credit || 0)
+        .sort((a, b) => b - a)
+        .slice(0, meta.rule)
+        .reduce((s, credit) => s + credit, 0);
+    }
+
+    function missingCreditsFor(meta, courses) {
+      const sum = summarize(courses);
+      if (meta.rule === 'all') return Math.max(0, sum.totalCredit - sum.doneCredit);
+      if (sum.done >= meta.rule) return 0;
+      const passedCredits = sum.passed
+        .map(c => c.credit || 0)
+        .sort((a, b) => b - a)
+        .slice(0, meta.rule)
+        .reduce((s, credit) => s + credit, 0);
+      return Math.max(0, requiredCreditsFor(meta, courses) - passedCredits);
+    }
+
     Object.entries(model.categories).forEach(([key, courses]) => {
       const meta = data.catMeta[key];
       if (!meta || meta.optional) return;
-      if (meta.rule === 'all') {
-        requiredCredit += courses.reduce((s, c) => s + (c.credit || 0), 0);
-      } else {
-        requiredCredit += courses
-          .map(c => c.credit || 0)
-          .sort((a, b) => b - a)
-          .slice(0, meta.rule)
-          .reduce((s, credit) => s + credit, 0);
-      }
+      requiredCredit += requiredCreditsFor(meta, courses);
     });
 
     if (selectedModule != null && model.modules[selectedModule]) {
@@ -173,8 +192,8 @@
     }
 
     data.mandatoryKeys.forEach(k => {
-      const s = summarize(model.categories[k]);
-      missingCredit += (s.totalCredit - s.doneCredit);
+      const meta = data.catMeta[k];
+      if (meta) missingCredit += missingCreditsFor(meta, model.categories[k] || []);
     });
 
     return { cpa, doneCredit, requiredCredit, missingCredit };
@@ -285,32 +304,38 @@
     }
   }
 
-  async function renderPanel(model) {
-    let currentModel = model;
+  async function renderTemplate(templateId) {
     const { css, html } = await loadAssets();
     shadow.innerHTML = `<style>${css}</style>${html}`;
-    const template = shadow.getElementById('dashboardTemplate');
+    const template = shadow.getElementById(templateId);
     shadow.innerHTML = `<style>${css}</style>`;
     shadow.appendChild(template.content.cloneNode(true));
+  }
+
+  function bindPanelShellEvents() {
+    const closeBtn = shadow.getElementById('closeBtn');
+    if (closeBtn) closeBtn.addEventListener('click', closePanel);
+    const backdrop = shadow.getElementById('backdrop');
+    if (backdrop) {
+      backdrop.addEventListener('click', e => {
+        if (e.target.id === 'backdrop') closePanel();
+      });
+    }
+  }
+
+  async function renderLoadingPanel() {
+    await renderTemplate('loadingTemplate');
+    bindPanelShellEvents();
+  }
+
+  async function renderPanel(model) {
+    let currentModel = model;
+    await renderTemplate('dashboardTemplate');
 
     fillDashboard(currentModel);
 
-    shadow.getElementById('closeBtn').addEventListener('click', closePanel);
-    shadow.getElementById('backdrop').addEventListener('click', e => {
-      if (e.target.id === 'backdrop') closePanel();
-    });
-    shadow.addEventListener('click', e => {
-      const btn = e.target.closest('.copy-code-btn');
-      if (!btn) return;
-      const code = btn.dataset.code;
-      navigator.clipboard.writeText(code).then(() => {
-        btn.classList.add('copied');
-        window.setTimeout(() => { btn.classList.remove('copied'); }, 1200);
-      }).catch(() => {
-        btn.classList.add('failed');
-        window.setTimeout(() => { btn.classList.remove('failed'); }, 1200);
-      });
-    });
+    bindPanelShellEvents();
+    bindCopyHandler();
     shadow.getElementById('rescanBtn').addEventListener('click', () => {
       currentModel = window.CTTBK_DATA.buildModel();
       fillDashboard(currentModel);
@@ -330,16 +355,68 @@
     shadow = hostEl.attachShadow({ mode: 'open' });
   }
 
+  function bindCopyHandler() {
+    if (copyHandlerBound) return;
+    copyHandlerBound = true;
+    shadow.addEventListener('click', e => {
+      const btn = e.target.closest('.copy-code-btn');
+      if (!btn) return;
+      const code = btn.dataset.code;
+      navigator.clipboard.writeText(code).then(() => {
+        btn.classList.add('copied');
+        window.setTimeout(() => { btn.classList.remove('copied'); }, 1200);
+      }).catch(() => {
+        btn.classList.add('failed');
+        window.setTimeout(() => { btn.classList.remove('failed'); }, 1200);
+      });
+    });
+  }
+
   function closePanel() {
     if (shadow) shadow.innerHTML = '';
     panelOpen = false;
   }
 
+  function waitForGrid(timeoutMs) {
+    const started = Date.now();
+    return new Promise(resolve => {
+      const poll = window.setInterval(() => {
+        if (window.CTTBK_DATA.gridPresent()) {
+          window.clearInterval(poll);
+          resolve(true);
+          return;
+        }
+        if (Date.now() - started >= timeoutMs) {
+          window.clearInterval(poll);
+          resolve(false);
+        }
+      }, 350);
+    });
+  }
+
+  async function ensureProgramGrid() {
+    if (window.CTTBK_DATA.gridPresent()) return true;
+    if (!window.CTTBK_DATA.showProgramButtonPresent()) return false;
+    sessionStorage.setItem('cttbk_auto_open', '1');
+    window.CTTBK_DATA.clickShowProgramButton();
+    const ready = await waitForGrid(10000);
+    if (ready) sessionStorage.removeItem('cttbk_auto_open');
+    return ready;
+  }
+
   async function openPanel() {
     ensureHost();
     panelOpen = true;
+    await renderLoadingPanel();
+    const ready = await ensureProgramGrid();
+    if (!panelOpen) return;
     selectedModule = await getLastModule();
-    await renderPanel(window.CTTBK_DATA.buildModel());
+    await renderPanel(ready ? window.CTTBK_DATA.buildModel() : {
+      raw: [],
+      categories: Object.fromEntries(Object.keys(window.CTTBK_DATA.catMeta).map(key => [key, []])),
+      modules: {},
+      others: [],
+    });
   }
 
   async function addFab() {
@@ -358,5 +435,5 @@
     });
   }
 
-  window.CTTBK_UI = { addFab };
+  window.CTTBK_UI = { addFab, openPanel };
 })();
