@@ -5,6 +5,9 @@
   <button class="fab fab-secondary" id="marksFabBtn" type="button" aria-label="Mở quản lý điểm số">
     <span>Quản lý điểm số</span>
   </button>
+  <button class="fab fab-secondary" id="generalFabBtn" type="button" aria-label="Mở quản lý tổng quát">
+    <span>Quản lý tổng quát</span>
+  </button>
 </div>
 
 <template id="loadingTemplate">
@@ -38,34 +41,35 @@
           <p class="sub">Dữ liệu được quét trực tiếp từ bảng điểm cá nhân hiện tại.</p>
         </div>
         <div class="btn-row">
-          <button class="icon-btn" id="marksBestBtn" type="button">Tốt nhất</button>
-          <button class="icon-btn" id="marksWorstBtn" type="button">Tệ nhất</button>
           <button class="icon-btn close-btn" id="closeBtn" type="button" title="Đóng">× <span>Đóng</span></button>
         </div>
       </header>
 
       <section class="overview marks-overview" aria-label="Tổng quan điểm">
-        <article class="summary-card">
-          <p class="label">Số học phần</p>
-          <p class="metric"><span id="marksCount">0</span></p>
-          <p class="caption">Danh sách này được cập nhật theo dữ liệu hiện có trên CTT-SIS.</p>
-        </article>
-        <article class="summary-card">
-          <p class="label">Điểm tốt nhất</p>
-          <p class="metric"><span id="bestGrade">-</span></p>
-          <p class="caption" id="bestCourse">Chưa có dữ liệu.</p>
-        </article>
-        <article class="summary-card">
-          <p class="label">Cần chú ý</p>
-          <p class="metric danger"><span id="worstGrade">-</span></p>
-          <p class="caption" id="worstCourse">Chưa có dữ liệu.</p>
+        <article class="summary-card marks-grade-card">
+          <div class="section-title">
+            <p class="label">Phân bố điểm</p>
+            <span class="soft-pill">Cao nhất</span>
+          </div>
+          <div id="marksGradeChart"></div>
         </article>
       </section>
 
       <section class="section-block">
         <div class="section-title">
           <h3>Danh sách học phần</h3>
-          <span class="soft-pill" id="marksSortLabel">Tốt nhất trước</span>
+          <div class="sort-control">
+            <button class="sort-icon-btn" id="marksSortToggleBtn" type="button" title="Đổi thứ tự sắp xếp" aria-label="Đổi thứ tự sắp xếp">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 7h11"></path>
+                <path d="M8 12h8"></path>
+                <path d="M8 17h5"></path>
+                <path d="M4 7v10"></path>
+                <path d="m2 15 2 2 2-2"></path>
+              </svg>
+            </button>
+            <span class="soft-pill" id="marksSortLabel">Tốt nhất trước</span>
+          </div>
         </div>
         <div class="marks-table-wrap">
           <table class="course-list marks-table">
@@ -75,10 +79,11 @@
                 <th>Mã HP</th>
                 <th>Tên học phần</th>
                 <th class="credit-head">TC</th>
-                <th>Điểm QT</th>
-                <th>Điểm thi</th>
-                <th>Điểm chữ</th>
-                <th>Điểm số</th>
+                <th class="grade-head">Điểm QT</th>
+                <th class="grade-head">Điểm thi</th>
+                <th class="grade-head">Điểm chữ</th>
+                <th class="grade-head">Điểm cũ</th>
+                <th class="grade-head">Điểm số</th>
               </tr>
             </thead>
             <tbody id="marksBody"></tbody>
@@ -88,6 +93,102 @@
 
       <footer class="note">
         Nội dung bảng điểm có thể thay đổi theo thời gian. Extension luôn quét dữ liệu đang hiển thị trên trang, không dùng danh sách học phần cố định.
+      </footer>
+    </section>
+  </div>
+</template>
+
+<template id="generalTemplate">
+  <div class="backdrop" id="backdrop">
+    <section class="panel" role="dialog" aria-modal="true" aria-labelledby="generalTitle">
+      <header class="panel-head">
+        <div>
+          <p class="eyebrow">CTT-SIS HUST</p>
+          <h2 id="generalTitle">Tổng quan kết quả học tập</h2>
+          <p class="sub">Dữ liệu được quét trực tiếp từ bảng Kết quả học tập sinh viên hiện tại.</p>
+        </div>
+        <div class="btn-row">
+          <button class="icon-btn close-btn" id="closeBtn" type="button" title="Đóng">× <span>Đóng</span></button>
+        </div>
+      </header>
+
+      <section class="overview general-overview" aria-label="Tổng quan kết quả học tập">
+        <article class="summary-card">
+          <p class="label">Học kỳ gần nhất</p>
+          <p class="metric"><span id="latestTerm">-</span></p>
+        </article>
+        <article class="summary-card">
+          <p class="label">CPA hiện tại</p>
+          <p class="metric"><span id="latestCpa">-</span></p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Tín chỉ tích lũy</p>
+          <p class="metric"><span id="latestAccumulatedCredits">-</span> <small>TC</small></p>
+        </article>
+        <article class="summary-card">
+          <p class="label">Cảnh báo</p>
+          <p class="metric" id="latestWarningMetric"><span id="latestWarning">-</span></p>
+        </article>
+      </section>
+
+      <section class="chart-grid general-chart-grid" aria-label="Biểu đồ kết quả học tập">
+        <article class="chart-card">
+          <div class="section-title">
+            <h3>GPA và CPA</h3>
+            <span class="soft-pill">Hệ 4</span>
+          </div>
+          <div id="gpaCpaChart"></div>
+        </article>
+        <article class="chart-card">
+          <div class="section-title">
+            <h3>Tín chỉ học kỳ</h3>
+            <span class="soft-pill">Theo học kỳ</span>
+          </div>
+          <div id="termCreditChart"></div>
+        </article>
+        <article class="chart-card">
+          <div class="section-title">
+            <h3>Tín chỉ tích lũy</h3>
+            <span class="soft-pill">Lũy kế</span>
+          </div>
+          <div id="cumulativeCreditChart"></div>
+        </article>
+        <article class="chart-card">
+          <div class="section-title">
+            <h3>Trình độ và cảnh báo</h3>
+            <span class="soft-pill">Biểu đồ</span>
+          </div>
+          <div id="statusTimeline"></div>
+        </article>
+      </section>
+
+      <section class="section-block">
+        <div class="section-title">
+          <h3>Chi tiết từng học kỳ</h3>
+          <span class="soft-pill" id="generalCount">0 học kỳ</span>
+        </div>
+        <div class="marks-table-wrap">
+          <table class="course-list general-table">
+            <thead>
+              <tr>
+                <th>Học kỳ</th>
+                <th>GPA</th>
+                <th>CPA</th>
+                <th>TC qua</th>
+                <th>TC tích lũy</th>
+                <th>TC nợ ĐK</th>
+                <th>TC ĐK</th>
+                <th>Trình độ</th>
+                <th>Cảnh báo</th>
+              </tr>
+            </thead>
+            <tbody id="generalBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <footer class="note">
+        Các biểu đồ dùng dữ liệu học kỳ đang có trên bảng CTT-SIS. Nếu trang chưa tải xong hoặc CTT-SIS đổi cấu trúc bảng, dữ liệu có thể cần quét lại bằng cách refresh trang.
       </footer>
     </section>
   </div>

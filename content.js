@@ -93,6 +93,85 @@
     );
   }
 
+  function cleanCellText(value) {
+    return (value || "").replace(/\u00a0/g, " ").trim().replace(/\s+/g, " ");
+  }
+
+  function numberOrNull(value) {
+    const n = Number(String(value || "").replace(",", ".").trim());
+    return Number.isNaN(n) ? null : n;
+  }
+
+  function generalResultsPresent() {
+    return (
+      !!document.querySelector('[id*="gvResults"]') ||
+      (document.body && document.body.innerText.includes("Kết quả học tập sinh viên"))
+    );
+  }
+
+  function scrapeGeneralResults() {
+    const rows = [];
+    const seen = new Set();
+
+    function addResultRow(data) {
+      const term = data["Học kỳ"] || "";
+      if (!/^\d{5}$/.test(term) || seen.has(term)) return;
+      seen.add(term);
+
+      rows.push({
+        term,
+        gpa: numberOrNull(data.GPA),
+        cpa: numberOrNull(data.CPA),
+        passedCredits: numberOrNull(data["TC qua"]),
+        accumulatedCredits: numberOrNull(data["TC tích lũy"]),
+        debtCredits: numberOrNull(data["TC nợ ĐK"]),
+        registeredCredits: numberOrNull(data["TC ĐK"]),
+        level: data["Trình độ"] || "",
+        warning: data["Cảnh báo"] || "",
+        missingScore: data["Thiếu điểm"] || "",
+        excluded: data["Không tính"] || "",
+        program: data["CTĐT"] || "",
+        expectedHandling: data["Dự kiến XLHT"] || "",
+        officialHandling: data["Xử lý chính thức"] || "",
+      });
+    }
+
+    document.querySelectorAll('[id*="gvResults"] .dxgvADT, .dxgvADT').forEach((table) => {
+      const data = {};
+      table.querySelectorAll("tr").forEach((tr) => {
+        const cells = Array.from(tr.children).map((td) => cleanCellText(td.innerText));
+        if (cells.length < 2) return;
+        const key = cells[0].replace(/:$/, "");
+        data[key] = cells[1];
+      });
+
+      addResultRow(data);
+    });
+
+    document.querySelectorAll('[id*="gvResults_DXMainTable"] tr, table[id*="gvResults"] tr').forEach((tr) => {
+      const cells = Array.from(tr.children).map((td) => cleanCellText(td.innerText));
+      if (cells.length < 9 || !/^\d{5}$/.test(cells[0])) return;
+      addResultRow({
+        "Học kỳ": cells[0],
+        GPA: cells[1],
+        CPA: cells[2],
+        "TC qua": cells[3],
+        "TC tích lũy": cells[4],
+        "TC nợ ĐK": cells[5],
+        "TC ĐK": cells[6],
+        "Trình độ": cells[7],
+        "Cảnh báo": cells[8],
+        "Thiếu điểm": cells[9],
+        "Không tính": cells[10],
+        "CTĐT": cells[11],
+        "Dự kiến XLHT": cells[12],
+        "Xử lý chính thức": cells[13],
+      });
+    });
+
+    return rows.sort((a, b) => String(b.term).localeCompare(String(a.term)));
+  }
+
   function scrapeMarks() {
     const rows = [];
     const seen = new Set();
@@ -258,8 +337,10 @@
     mandatoryKeys: MANDATORY_KEYS,
     buildModel,
     scrapeMarks,
+    scrapeGeneralResults,
     gridPresent,
     marksPresent,
+    generalResultsPresent,
     showProgramButtonPresent,
     clickShowProgramButton,
   };
@@ -277,6 +358,13 @@
         ) {
           sessionStorage.removeItem("cttbk_open_target");
           window.CTTBK_UI.openPanel("marks");
+        }
+        if (
+          target === "general" &&
+          generalResultsPresent()
+        ) {
+          sessionStorage.removeItem("cttbk_open_target");
+          window.CTTBK_UI.openPanel("general");
         }
         if (
           target === "courses" &&

@@ -9,8 +9,11 @@
   let assetsPromise;
   let selectedModule = null;
   let copyHandlerBound = false;
+  let chartTooltipBound = false;
   const PROGRAM_PATH = '/Students/StudentProgram.aspx';
   const MARKS_PATH = '/Students/StudentCourseMarks.aspx';
+  const GENERAL_PATH = MARKS_PATH;
+  const SELECTED_MODULE_KEY = 'cttbk_selected_module';
 
   function fmt(n) {
     return (Math.round(n * 100) / 100).toString();
@@ -24,6 +27,17 @@
       '"': '&quot;',
       "'": '&#39;',
     })[ch]);
+  }
+
+  function extensionURL(path) {
+    return globalThis.chrome && chrome.runtime && typeof chrome.runtime.getURL === 'function'
+      ? chrome.runtime.getURL(path)
+      : null;
+  }
+
+  function setText(id, value) {
+    const el = shadow && shadow.getElementById(id);
+    if (el) el.textContent = value;
   }
 
   function summarize(courses) {
@@ -152,6 +166,128 @@
     });
   }
 
+  function normalizeCourseCode(code) {
+    return String(code || '').trim().toUpperCase();
+  }
+
+  function isPassingGrade(letter) {
+    const point = gradePoint(letter);
+    return point != null && point > 0;
+  }
+
+  function recalculateTermStats(generalRows, markRows) {
+    const terms = Array.from(new Set(generalRows.map(row => row.term).filter(Boolean)))
+      .sort((a, b) => String(a).localeCompare(String(b)));
+    const marks = markRows
+      .filter(row => /^\d{5}$/.test(String(row.term || '')) && row.credit > 0 && normalizeCourseCode(row.code))
+      .map(row => ({
+        ...row,
+        code: normalizeCourseCode(row.code),
+        point: gradePoint(row.letterGrade),
+      }))
+      .filter(row => row.point != null);
+
+    const latestPassTermByCode = new Map();
+    marks.forEach(row => {
+      if (!isPassingGrade(row.letterGrade)) return;
+      const current = latestPassTermByCode.get(row.code);
+      if (!current || String(row.term).localeCompare(String(current)) > 0) {
+        latestPassTermByCode.set(row.code, row.term);
+      }
+    });
+
+    const stats = new Map();
+    terms.forEach(term => {
+      const bestPassingAttempt = new Map();
+      marks.forEach(row => {
+        if (String(row.term).localeCompare(String(term)) > 0 || !isPassingGrade(row.letterGrade)) return;
+        const current = bestPassingAttempt.get(row.code);
+        if (
+          !current ||
+          row.point > current.point ||
+          (row.point === current.point && String(row.term).localeCompare(String(current.term)) > 0)
+        ) {
+          bestPassingAttempt.set(row.code, row);
+        }
+      });
+
+      let accumulatedCredits = 0;
+      let weightedPoints = 0;
+      bestPassingAttempt.forEach(row => {
+        accumulatedCredits += row.credit;
+        weightedPoints += row.credit * row.point;
+      });
+
+      const clearedDebtCredits = new Map();
+      marks.forEach(row => {
+        if (String(row.term).localeCompare(String(term)) > 0) return;
+        if (row.point !== 0) return;
+        const passTerm = latestPassTermByCode.get(row.code);
+        if (!passTerm || String(passTerm).localeCompare(String(term)) <= 0) return;
+        clearedDebtCredits.set(row.code, Math.max(clearedDebtCredits.get(row.code) || 0, row.credit));
+      });
+
+      const clearedDebt = Array.from(clearedDebtCredits.values()).reduce((sum, credit) => sum + credit, 0);
+      stats.set(term, {
+        recalculatedCpa: accumulatedCredits ? weightedPoints / accumulatedCredits : null,
+        recalculatedAccumulatedCredits: accumulatedCredits,
+        clearedDebtCredits: clearedDebt,
+      });
+    });
+
+    return stats;
+  }
+
+  function effectiveMarkRows(rows) {
+    const byCode = new Map();
+    rows.forEach(row => {
+      const code = normalizeCourseCode(row.code);
+      if (!code) return;
+      if (!byCode.has(code)) byCode.set(code, []);
+      byCode.get(code).push(row);
+    });
+
+    return Array.from(byCode.values()).map(attempts => {
+      const sorted = attempts.slice().sort((a, b) => {
+        const termDiff = String(a.term || '').localeCompare(String(b.term || ''));
+        if (termDiff) return termDiff;
+        return String(a.classCode || '').localeCompare(String(b.classCode || ''));
+      });
+      const latest = sorted.slice().sort((a, b) => {
+        const pointDiff = (gradePoint(b.letterGrade) ?? -1) - (gradePoint(a.letterGrade) ?? -1);
+        if (pointDiff) return pointDiff;
+        return String(b.term || '').localeCompare(String(a.term || ''));
+      })[0];
+      const previousAttempt = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+      const oldGrades = previousAttempt && previousAttempt !== latest
+        ? [String(previousAttempt.letterGrade || '').trim().toUpperCase()].filter(Boolean)
+        : [];
+      return {
+        ...latest,
+        oldLetterGrades: oldGrades,
+      };
+    });
+  }
+
+  function applyRecalculatedGeneralRows(generalRows, markRows) {
+    if (!generalRows.length || !markRows.length) return generalRows;
+    const stats = recalculateTermStats(generalRows, markRows);
+    return generalRows.map(row => {
+      const stat = stats.get(row.term);
+      if (!stat) return row;
+      return {
+        ...row,
+        rawCpa: row.cpa,
+        rawAccumulatedCredits: row.accumulatedCredits,
+        rawDebtCredits: row.debtCredits,
+        cpa: stat.recalculatedCpa,
+        accumulatedCredits: stat.recalculatedAccumulatedCredits,
+        debtCredits: Math.max(0, (safeNumber(row.debtCredits) ?? 0) - stat.clearedDebtCredits),
+        clearedDebtCredits: stat.clearedDebtCredits,
+      };
+    });
+  }
+
   function arcPath(cx, cy, r, a0, a1) {
     const toRad = a => (a - 90) * Math.PI / 180;
     const x0 = cx + r * Math.cos(toRad(a0));
@@ -178,11 +314,199 @@
     </svg>`;
   }
 
+  function safeNumber(value) {
+    return typeof value === 'number' && !Number.isNaN(value) ? value : null;
+  }
+
+  function valueText(value) {
+    const n = safeNumber(value);
+    return n == null ? '-' : escapeHTML(fmt(n));
+  }
+
+  function warningLevel(value) {
+    const match = String(value || '').match(/\d+/);
+    return match ? Number(match[0]) : null;
+  }
+
+  function warningClass(value) {
+    const level = warningLevel(value);
+    if (level === 0) return 'warning-good';
+    if (level === 1 || level === 2) return 'warning-warn';
+    if (level != null && level >= 3) return 'warning-danger';
+    return 'warning-unknown';
+  }
+
+  function levelNumber(value) {
+    const text = String(value || '').toLowerCase();
+    if (/ba|3/.test(text)) return 3;
+    if (/hai|2/.test(text)) return 2;
+    if (/nhất|mot|một|1/.test(text)) return 1;
+    return 0;
+  }
+
+  function tooltipText(lines) {
+    return escapeHTML(lines.filter(line => line != null && line !== '').join('\n'));
+  }
+
+  function latestTermRows(rows) {
+    return rows.slice().sort((a, b) => String(b.term).localeCompare(String(a.term)));
+  }
+
+  function chartPoints(rows, key, min, max, width, height, pad) {
+    const denom = Math.max(1, max - min);
+    const count = Math.max(1, rows.length - 1);
+    return rows.map((row, index) => {
+      const value = safeNumber(row[key]) ?? min;
+      const x = pad + (width - pad * 2) * (index / count);
+      const y = height - pad - ((value - min) / denom) * (height - pad * 2);
+      return { x, y, value, term: row.term };
+    });
+  }
+
+  function lineChartSVG(rows) {
+    if (!rows.length) return '<div class="empty-note">Không có dữ liệu kết quả học tập.</div>';
+    const ordered = rows.slice().sort((a, b) => String(a.term).localeCompare(String(b.term)));
+    const width = 680;
+    const height = 260;
+    const pad = 34;
+    const gpa = chartPoints(ordered, 'gpa', 0, 4, width, height, pad);
+    const cpa = chartPoints(ordered, 'cpa', 0, 4, width, height, pad);
+    const polyline = points => points.map(p => `${p.x},${p.y}`).join(' ');
+    const labels = ordered.map((row, index) => {
+      const x = pad + (width - pad * 2) * (index / Math.max(1, ordered.length - 1));
+      return `<text x="${x}" y="${height - 8}" text-anchor="middle">${escapeHTML(row.term)}</text>`;
+    }).join('');
+
+    return `<svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ GPA và CPA theo học kỳ">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" class="chart-axis"/>
+      <text x="8" y="${pad + 4}" class="chart-label">4.0</text>
+      <text x="8" y="${height - pad}" class="chart-label">0</text>
+      <polyline points="${polyline(gpa)}" class="chart-line chart-line-gpa"/>
+      <polyline points="${polyline(cpa)}" class="chart-line chart-line-cpa"/>
+      ${gpa.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-gpa" data-tooltip="${tooltipText([p.term, `GPA: ${valueText(p.value)}`, `CPA: ${valueText(ordered[index].cpa)}`])}"></circle>`).join('')}
+      ${cpa.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-cpa" data-tooltip="${tooltipText([p.term, `CPA: ${valueText(p.value)}`, `GPA: ${valueText(ordered[index].gpa)}`])}"></circle>`).join('')}
+      ${labels}
+    </svg>
+    <div class="chart-legend"><span class="legend-gpa">GPA</span><span class="legend-cpa">CPA</span></div>`;
+  }
+
+  function termCreditChartSVG(rows) {
+    if (!rows.length) return '<div class="empty-note">Không có dữ liệu tín chỉ.</div>';
+    const ordered = rows.slice().sort((a, b) => String(a.term).localeCompare(String(b.term)));
+    const width = 680;
+    const height = 260;
+    const pad = 34;
+    const maxValue = Math.max(1, ...ordered.map(row => Math.max(
+      safeNumber(row.passedCredits) ?? 0,
+      safeNumber(row.debtCredits) ?? 0
+    )));
+    const slot = (width - pad * 2) / Math.max(1, ordered.length);
+    const barW = Math.min(20, Math.max(8, slot / 4));
+    const bars = ordered.map((row, index) => {
+      const x = pad + slot * index + slot / 2;
+      const passed = safeNumber(row.passedCredits) ?? 0;
+      const debt = safeNumber(row.debtCredits) ?? 0;
+      const passedH = (passed / maxValue) * (height - pad * 2);
+      const debtH = (debt / maxValue) * (height - pad * 2);
+      return `
+        <rect x="${x - barW - 2}" y="${height - pad - passedH}" width="${barW}" height="${passedH}" class="chart-bar chart-bar-passed chart-mark" data-tooltip="${tooltipText([row.term, `TC qua: ${valueText(passed)}`, `TC nợ ĐK: ${valueText(debt)}`])}"></rect>
+        <rect x="${x + 2}" y="${height - pad - debtH}" width="${barW}" height="${debtH}" class="chart-bar chart-bar-debt chart-mark" data-tooltip="${tooltipText([row.term, `TC nợ ĐK: ${valueText(debt)}`, `TC qua: ${valueText(passed)}`])}"></rect>
+        <text x="${x}" y="${height - 8}" text-anchor="middle">${escapeHTML(row.term)}</text>
+      `;
+    }).join('');
+
+    return `<svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ tín chỉ học kỳ">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" class="chart-axis"/>
+      <text x="8" y="${pad + 4}" class="chart-label">${escapeHTML(maxValue)}</text>
+      <text x="8" y="${height - pad}" class="chart-label">0</text>
+      ${bars}
+    </svg>
+    <div class="chart-legend"><span class="legend-passed">TC qua</span><span class="legend-debt">TC nợ ĐK</span></div>`;
+  }
+
+  function cumulativeCreditChartSVG(rows) {
+    if (!rows.length) return '<div class="empty-note">Không có dữ liệu tín chỉ tích lũy.</div>';
+    const ordered = rows.slice().sort((a, b) => String(a.term).localeCompare(String(b.term)));
+    const width = 680;
+    const height = 260;
+    const pad = 34;
+    const maxValue = Math.max(1, ...ordered.map(row => Math.max(
+      safeNumber(row.accumulatedCredits) ?? 0,
+      safeNumber(row.registeredCredits) ?? 0
+    )));
+    const accumulated = chartPoints(ordered, 'accumulatedCredits', 0, maxValue, width, height, pad);
+    const registered = chartPoints(ordered, 'registeredCredits', 0, maxValue, width, height, pad);
+    const polyline = points => points.map(p => `${p.x},${p.y}`).join(' ');
+    const labels = ordered.map((row, index) => {
+      const x = pad + (width - pad * 2) * (index / Math.max(1, ordered.length - 1));
+      return `<text x="${x}" y="${height - 8}" text-anchor="middle">${escapeHTML(row.term)}</text>`;
+    }).join('');
+
+    return `<svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ tín chỉ tích lũy">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" class="chart-axis"/>
+      <text x="8" y="${pad + 4}" class="chart-label">${escapeHTML(maxValue)}</text>
+      <text x="8" y="${height - pad}" class="chart-label">0</text>
+      <polyline points="${polyline(accumulated)}" class="chart-line chart-line-cpa"/>
+      <polyline points="${polyline(registered)}" class="chart-line chart-line-registered"/>
+      ${accumulated.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-cpa" data-tooltip="${tooltipText([p.term, `TC tích lũy: ${valueText(p.value)}`, `TC ĐK: ${valueText(ordered[index].registeredCredits)}`])}"></circle>`).join('')}
+      ${registered.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-registered" data-tooltip="${tooltipText([p.term, `TC ĐK: ${valueText(p.value)}`, `TC tích lũy: ${valueText(ordered[index].accumulatedCredits)}`])}"></circle>`).join('')}
+      ${labels}
+    </svg>
+    <div class="chart-legend"><span class="legend-cpa">TC tích lũy</span><span class="legend-registered">TC ĐK</span></div>`;
+  }
+
+  function statusTimelineSVG(rows) {
+    if (!rows.length) return '<div class="empty-note">Không có dữ liệu trạng thái.</div>';
+    const ordered = rows.slice().sort((a, b) => String(a.term).localeCompare(String(b.term)));
+    const width = 680;
+    const height = 260;
+    const pad = 44;
+    const count = Math.max(1, ordered.length - 1);
+    const levelPoints = ordered.map((row, index) => {
+      const level = levelNumber(row.level);
+      const x = pad + (width - pad * 2) * (index / count);
+      const y = height - pad - (Math.min(3, Math.max(0, level)) / 3) * (height - pad * 2);
+      return { x, y, level, row };
+    });
+    const warningPoints = ordered.map((row, index) => {
+      const level = warningLevel(row.warning) ?? 0;
+      const x = pad + (width - pad * 2) * (index / count);
+      const y = height - pad - (Math.min(3, Math.max(0, level)) / 3) * (height - pad * 2);
+      return { x, y, level, row };
+    });
+    const levelLine = levelPoints.map(p => `${p.x},${p.y}`).join(' ');
+    const warningLine = warningPoints.map(p => `${p.x},${p.y}`).join(' ');
+
+    return `<svg class="trend-chart status-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ trình độ và cảnh báo theo học kỳ">
+      <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
+      <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" class="chart-axis"/>
+      ${[0, 1, 2, 3].map(level => {
+        const y = height - pad - (level / 3) * (height - pad * 2);
+        return `<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" class="chart-grid-line"/><text x="10" y="${y + 4}" class="chart-label">${level}</text>`;
+      }).join('')}
+      <polyline points="${levelLine}" class="chart-line chart-line-level"/>
+      <polyline points="${warningLine}" class="chart-line chart-line-warning"/>
+      ${levelPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" class="chart-dot chart-dot-level" data-tooltip="${tooltipText([p.row.term, `Trình độ: ${p.row.level || '-'}`, `Cảnh báo: ${p.row.warning || '-'}`])}"></circle>`).join('')}
+      ${warningPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" class="chart-dot ${warningClass(p.row.warning)}" data-tooltip="${tooltipText([p.row.term, `Cảnh báo: ${p.row.warning || '-'}`, `Trình độ: ${p.row.level || '-'}`])}"></circle>`).join('')}
+      ${levelPoints.map(p => `<text x="${p.x}" y="${height - 8}" text-anchor="middle">${escapeHTML(p.row.term)}</text>`).join('')}
+    </svg>
+    <div class="chart-legend"><span class="legend-level">Trình độ</span><span class="legend-good">Mức 0</span><span class="legend-registered">Mức 1-2</span><span class="legend-gpa">Mức 3+</span></div>`;
+  }
+
   async function loadAssets() {
     if (!assetsPromise) {
+      const stylesURL = extensionURL('styles.css');
+      const panelURL = extensionURL('panel.html');
+      if (!stylesURL || !panelURL) {
+        assetsPromise = Promise.reject(new Error('Extension runtime is unavailable. Reload the CTT-SIS tab after reloading the extension.'));
+        return assetsPromise;
+      }
       assetsPromise = Promise.all([
-        fetch(chrome.runtime.getURL('styles.css')).then(r => r.text()),
-        fetch(chrome.runtime.getURL('panel.html')).then(r => r.text()),
+        fetch(stylesURL).then(r => r.text()),
+        fetch(panelURL).then(r => r.text()),
       ]).then(([css, html]) => ({ css, html }));
     }
     return assetsPromise;
@@ -190,8 +514,14 @@
 
   async function getLastModule() {
     try {
-      const r = await chrome.storage.local.get('cttbk_selected_module');
-      return r.cttbk_selected_module == null ? null : Number(r.cttbk_selected_module);
+      const stored = window.localStorage.getItem(SELECTED_MODULE_KEY);
+      if (stored != null && stored !== '') return Number(stored);
+    } catch (e) {}
+
+    try {
+      if (!globalThis.chrome || !chrome.storage || !chrome.storage.local) return null;
+      const r = await chrome.storage.local.get(SELECTED_MODULE_KEY);
+      return r[SELECTED_MODULE_KEY] == null ? null : Number(r[SELECTED_MODULE_KEY]);
     } catch (e) {
       return null;
     }
@@ -199,7 +529,13 @@
 
   function setLastModule(num) {
     try {
-      chrome.storage.local.set({ cttbk_selected_module: num });
+      window.localStorage.setItem(SELECTED_MODULE_KEY, String(num));
+    } catch (e) {}
+
+    try {
+      if (globalThis.chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ [SELECTED_MODULE_KEY]: num });
+      }
     } catch (e) {}
   }
 
@@ -363,26 +699,41 @@
     }
   }
 
+  function marksGradeChartHTML(rows) {
+    const grades = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F'];
+    const counts = Object.fromEntries(grades.map(grade => [grade, 0]));
+    rows.forEach(row => {
+      const grade = String(row.letterGrade || '').trim().toUpperCase();
+      if (counts[grade] == null) counts[grade] = 0;
+      counts[grade]++;
+    });
+    const max = Math.max(1, ...Object.values(counts));
+
+    return `<div class="grade-distribution">${grades.map(grade => {
+      const count = counts[grade] || 0;
+      return `<div class="grade-bar-row">
+        <span class="grade-bar-label">${escapeHTML(grade)}</span>
+        <div class="grade-bar-track"><div class="grade-bar-fill grade-${grade.replace('+', 'plus').toLowerCase()}" style="--pct:${count / max * 100}%"></div></div>
+        <span class="grade-bar-count">${count}</span>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
   function fillMarks(rows, direction) {
     const sorted = sortMarks(rows, direction);
-    const best = sortMarks(rows, 'best')[0];
-    const worst = sortMarks(rows, 'worst')[0];
 
-    shadow.getElementById('marksCount').textContent = rows.length;
-    shadow.getElementById('bestGrade').innerHTML = best ? summaryGrade(best.letterGrade) : '-';
-    shadow.getElementById('bestCourse').textContent = best ? `${best.code} - ${best.name}` : 'Chưa có dữ liệu.';
-    shadow.getElementById('worstGrade').innerHTML = worst ? summaryGrade(worst.letterGrade) : '-';
-    shadow.getElementById('worstCourse').textContent = worst ? `${worst.code} - ${worst.name}` : 'Chưa có dữ liệu.';
+    shadow.getElementById('marksGradeChart').innerHTML = marksGradeChartHTML(rows);
     shadow.getElementById('marksSortLabel').textContent = direction === 'worst' ? 'Tệ nhất trước' : 'Tốt nhất trước';
     shadow.getElementById('marksBody').innerHTML = sorted.map(row => `
       <tr>
-        <td class="grade-cell">${escapeHTML(row.term)}</td>
+        <td class="term-cell">${escapeHTML(row.term)}</td>
         <td class="code">${escapeHTML(row.code)}</td>
         <td>${escapeHTML(row.name)}</td>
         <td class="credit">${escapeHTML(row.credit || 0)}</td>
         <td class="grade-cell">${markScoreText(row.processScore)}</td>
         <td class="grade-cell">${markScoreText(row.examScore)}</td>
         <td class="grade-cell">${gradeBadge(row.letterGrade)}</td>
+        <td class="grade-cell old-grade-cell">${(row.oldLetterGrades || []).length ? row.oldLetterGrades.map(gradeBadge).join(' ') : '-'}</td>
         <td class="grade-cell">${gradePointText(row.letterGrade)}</td>
       </tr>
     `).join('');
@@ -390,17 +741,51 @@
 
   async function renderMarksPanel(rows) {
     let currentSort = 'best';
+    const displayRows = effectiveMarkRows(rows);
     await renderTemplate('marksTemplate');
-    fillMarks(rows, currentSort);
+    fillMarks(displayRows, currentSort);
     bindPanelShellEvents();
-    shadow.getElementById('marksBestBtn').addEventListener('click', () => {
-      currentSort = 'best';
-      fillMarks(rows, currentSort);
+    shadow.getElementById('marksSortToggleBtn').addEventListener('click', () => {
+      currentSort = currentSort === 'best' ? 'worst' : 'best';
+      fillMarks(displayRows, currentSort);
     });
-    shadow.getElementById('marksWorstBtn').addEventListener('click', () => {
-      currentSort = 'worst';
-      fillMarks(rows, currentSort);
-    });
+  }
+
+  function fillGeneral(rows) {
+    const latest = latestTermRows(rows)[0];
+    setText('generalCount', `${rows.length} học kỳ`);
+    setText('latestTerm', latest ? latest.term : '-');
+    setText('latestCpa', latest ? valueText(latest.cpa) : '-');
+    setText('latestAccumulatedCredits', latest ? valueText(latest.accumulatedCredits) : '-');
+    setText('latestWarning', latest && latest.warning ? latest.warning : '-');
+    const warningMetric = shadow.getElementById('latestWarningMetric');
+    if (warningMetric) {
+      warningMetric.className = `metric ${latest ? warningClass(latest.warning) : 'warning-unknown'}`;
+    }
+    shadow.getElementById('gpaCpaChart').innerHTML = lineChartSVG(rows);
+    shadow.getElementById('termCreditChart').innerHTML = termCreditChartSVG(rows);
+    shadow.getElementById('cumulativeCreditChart').innerHTML = cumulativeCreditChartSVG(rows);
+    shadow.getElementById('statusTimeline').innerHTML = statusTimelineSVG(rows);
+    shadow.getElementById('generalBody').innerHTML = latestTermRows(rows).map(row => `
+      <tr>
+        <td class="grade-cell">${escapeHTML(row.term)}</td>
+        <td class="grade-cell">${valueText(row.gpa)}</td>
+        <td class="grade-cell">${valueText(row.cpa)}</td>
+        <td class="credit">${valueText(row.passedCredits)}</td>
+        <td class="credit wide-credit">${valueText(row.accumulatedCredits)}</td>
+        <td class="credit wide-credit">${valueText(row.debtCredits)}</td>
+        <td class="credit">${valueText(row.registeredCredits)}</td>
+        <td>${escapeHTML(row.level || '-')}</td>
+        <td class="center-cell"><span class="warning-chip ${warningClass(row.warning)}">${escapeHTML(row.warning || '-')}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  async function renderGeneralPanel(rows) {
+    await renderTemplate('generalTemplate');
+    fillGeneral(rows);
+    bindPanelShellEvents();
+    bindChartTooltips();
   }
 
   async function renderTemplate(templateId) {
@@ -420,6 +805,52 @@
         if (e.target.id === 'backdrop') closePanel();
       });
     }
+  }
+
+  function bindChartTooltips() {
+    let tooltip = shadow.getElementById('chartTooltip');
+    if (!tooltip) {
+      tooltip = document.createElement('div');
+      tooltip.id = 'chartTooltip';
+      tooltip.className = 'chart-tooltip';
+      (shadow.getElementById('backdrop') || shadow).appendChild(tooltip);
+    }
+
+    function moveTooltip(e) {
+      const backdrop = shadow.getElementById('backdrop');
+      const rect = backdrop ? backdrop.getBoundingClientRect() : { left: 0, top: 0 };
+      const scrollLeft = backdrop ? backdrop.scrollLeft : 0;
+      const scrollTop = backdrop ? backdrop.scrollTop : 0;
+      tooltip.style.left = `${e.clientX - rect.left + scrollLeft + 12}px`;
+      tooltip.style.top = `${e.clientY - rect.top + scrollTop + 12}px`;
+    }
+
+    if (chartTooltipBound) return;
+    chartTooltipBound = true;
+
+    shadow.addEventListener('pointerover', e => {
+      const target = e.target.closest && e.target.closest('[data-tooltip]');
+      if (!target) return;
+      tooltip.textContent = target.dataset.tooltip || '';
+      if (tooltip.textContent) {
+        moveTooltip(e);
+        tooltip.classList.add('is-visible');
+      }
+    });
+
+    shadow.addEventListener('pointermove', e => {
+      if (!tooltip.classList.contains('is-visible')) return;
+      if (!(e.target.closest && e.target.closest('[data-tooltip]'))) return;
+      moveTooltip(e);
+    });
+
+    shadow.addEventListener('pointerout', e => {
+      const target = e.target.closest && e.target.closest('[data-tooltip]');
+      if (!target) return;
+      const next = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('[data-tooltip]');
+      if (next === target) return;
+      tooltip.classList.remove('is-visible');
+    });
   }
 
   async function renderLoadingPanel() {
@@ -475,6 +906,7 @@
     if (shadow) shadow.innerHTML = '';
     panelOpen = false;
     currentPanelMode = null;
+    chartTooltipBound = false;
   }
 
   function waitForGrid(timeoutMs) {
@@ -505,7 +937,24 @@
   }
 
   function openTarget(target) {
-    const path = target === 'marks' ? MARKS_PATH : PROGRAM_PATH;
+    if (target === 'general' && window.CTTBK_DATA.generalResultsPresent()) {
+      openPanel('general');
+      return;
+    }
+    if (target === 'marks' && window.CTTBK_DATA.marksPresent()) {
+      openPanel('marks');
+      return;
+    }
+    if (target === 'courses' && (window.CTTBK_DATA.gridPresent() || window.CTTBK_DATA.showProgramButtonPresent())) {
+      openPanel('courses');
+      return;
+    }
+
+    const path = {
+      courses: PROGRAM_PATH,
+      marks: MARKS_PATH,
+      general: GENERAL_PATH,
+    }[target] || PROGRAM_PATH;
     if (location.pathname !== path) {
       sessionStorage.setItem('cttbk_open_target', target);
       location.href = `${location.origin}${path}`;
@@ -517,10 +966,17 @@
   async function openPanel(target) {
     ensureHost();
     panelOpen = true;
-    const mode = target || (window.CTTBK_DATA.marksPresent() ? 'marks' : 'courses');
+    const mode = target || (window.CTTBK_DATA.generalResultsPresent() ? 'general' : (window.CTTBK_DATA.marksPresent() ? 'marks' : 'courses'));
     currentPanelMode = mode;
     if (mode === 'marks') {
       await renderMarksPanel(window.CTTBK_DATA.scrapeMarks());
+      return;
+    }
+    if (mode === 'general') {
+      await renderGeneralPanel(applyRecalculatedGeneralRows(
+        window.CTTBK_DATA.scrapeGeneralResults(),
+        window.CTTBK_DATA.scrapeMarks()
+      ));
       return;
     }
     await renderLoadingPanel();
@@ -552,6 +1008,10 @@
     fabShadow.getElementById('marksFabBtn').addEventListener('click', () => {
       if (panelOpen && currentPanelMode === 'marks') closePanel();
       else openTarget('marks');
+    });
+    fabShadow.getElementById('generalFabBtn').addEventListener('click', () => {
+      if (panelOpen && currentPanelMode === 'general') closePanel();
+      else openTarget('general');
     });
   }
 

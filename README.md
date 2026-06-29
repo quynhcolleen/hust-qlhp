@@ -2,7 +2,7 @@
 
 Chrome extension hỗ trợ sinh viên HUST theo dõi tiến độ học tập trực tiếp trên CTT-SIS.
 
-Tiện ích đọc dữ liệu đang hiển thị trên các trang CTT-SIS, sau đó tạo dashboard để xem nhanh CPA, tín chỉ tích lũy, học phần còn thiếu, mô đun chuyên ngành và bảng điểm cá nhân.
+Tiện ích đọc dữ liệu đang hiển thị trên các trang CTT-SIS, sau đó tạo dashboard để xem nhanh CPA, tín chỉ tích lũy, học phần còn thiếu, mô đun chuyên ngành, bảng điểm cá nhân và kết quả học tập theo từng học kỳ.
 
 ## Tính năng
 
@@ -15,6 +15,7 @@ Tiện ích đọc dữ liệu đang hiển thị trên các trang CTT-SIS, sau 
 - Copy nhanh mã học phần chưa học.
 - Xếp hạng bảng điểm cá nhân theo điểm tốt nhất hoặc cần chú ý nhất.
 - Hiển thị điểm chữ A+, A, B+, B, C+, C, D+, D, F/R và điểm hệ 4 tương ứng.
+- Hiển thị dashboard tổng quát cho GPA, CPA, tín chỉ qua, tín chỉ tích lũy, tín chỉ nợ đăng ký, tín chỉ đăng ký, trình độ và mức cảnh báo theo học kỳ.
 
 Tiện ích không hiển thị nút nổi ở trang đăng nhập CTT-SIS.
 
@@ -47,10 +48,11 @@ chrome://extensions
 https://ctt-sis.hust.edu.vn/
 ```
 
-Ở góc dưới bên phải sẽ có hai nút:
+Ở góc dưới bên phải sẽ có ba nút:
 
 - **Quản lý học phần**: mở trang Chương trình đào tạo và hiển thị dashboard tiến độ.
 - **Quản lý điểm số**: mở trang Bảng điểm cá nhân và hiển thị bảng xếp hạng điểm.
+- **Quản lý tổng quát**: mở dashboard Kết quả học tập sinh viên với biểu đồ GPA/CPA, tín chỉ và trạng thái học tập theo học kỳ.
 
 Các đường dẫn chính:
 
@@ -89,9 +91,9 @@ Sau khi chỉnh sửa source:
 ## Cấu trúc source
 
 - `manifest.json`: cấu hình Chrome extension.
-- `content.js`: bootstrap content script, quét dữ liệu CTT-SIS và phân loại học phần.
-- `ui.js`: điều hướng trang, dựng dashboard, xử lý nút bấm và bảng điểm.
-- `panel.html`: template HTML cho nút nổi, dashboard học phần và dashboard điểm.
+- `content.js`: bootstrap content script, quét dữ liệu CTT-SIS, phân loại học phần, đọc bảng điểm và đọc kết quả học tập theo học kỳ.
+- `ui.js`: điều hướng trang, dựng dashboard, xử lý nút bấm, bảng điểm và biểu đồ tổng quát.
+- `panel.html`: template HTML cho nút nổi, dashboard học phần, dashboard điểm và dashboard tổng quát.
 - `styles.css`: toàn bộ style của extension.
 - `logo*.png`: icon extension theo nhiều kích thước.
 
