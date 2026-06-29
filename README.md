@@ -4,6 +4,8 @@ Chrome extension hỗ trợ sinh viên HUST theo dõi tiến độ học tập t
 
 Tiện ích đọc dữ liệu đang hiển thị trên các trang CTT-SIS, sau đó tạo dashboard để xem nhanh CPA, tín chỉ tích lũy, học phần còn thiếu, mô đun chuyên ngành, bảng điểm cá nhân và kết quả học tập theo từng học kỳ.
 
+> **Lưu ý quan trọng:** Extension này hiện có thể chỉ hoạt động đúng với mã ngành **ET1**. Một số dữ liệu chương trình đào tạo của các mã ngành khác chưa đủ để phân loại học phần, mô đun chuyên ngành và tín chỉ bắt buộc một cách chính xác, nên kết quả ở các ngành khác có thể sai hoặc thiếu.
+
 ## Tính năng
 
 - Tổng hợp chương trình đào tạo từ trang CTT-SIS.
