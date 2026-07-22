@@ -702,7 +702,9 @@
   function marksGradeChartHTML(rows) {
     const grades = ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F'];
     const counts = Object.fromEntries(grades.map(grade => [grade, 0]));
-    rows.forEach(row => {
+    rows
+      .filter((row) => Number(row.credit) > 0)
+      .forEach((row) => {
       const grade = String(row.letterGrade || '').trim().toUpperCase();
       if (counts[grade] == null) counts[grade] = 0;
       counts[grade]++;
