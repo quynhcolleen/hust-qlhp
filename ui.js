@@ -296,18 +296,19 @@
     });
   }
 
-  const LEVEL_LABELS = ['', 'Năm thứ nhất', 'Năm thứ hai', 'Năm thứ ba', 'Năm thứ tư', 'Năm thứ năm'];
-  const CREDITS_PER_LEVEL = 32;
+  /* Quy chế: xếp hạng trình độ năm học căn cứ số TC tích lũy (TCTL).
+     < 32: năm thứ nhất | 32-63: năm thứ hai | 64-95: năm thứ ba | 96-127: năm thứ tư | >= 128: năm thứ năm */
+  const LEVEL_THRESHOLDS = [
+    { minCredits: 128, label: 'Năm thứ năm' },
+    { minCredits: 96, label: 'Năm thứ tư' },
+    { minCredits: 64, label: 'Năm thứ ba' },
+    { minCredits: 32, label: 'Năm thứ hai' },
+    { minCredits: 0, label: 'Năm thứ nhất' },
+  ];
 
-  function levelLabel(level) {
-    return LEVEL_LABELS[Math.min(LEVEL_LABELS.length - 1, Math.max(1, level))];
-  }
-
-  function estimatedLevel(accumulatedCredits, previousRow) {
+  function estimatedLevel(accumulatedCredits) {
     const credits = safeNumber(accumulatedCredits) ?? 0;
-    const fromCredits = Math.floor(credits / CREDITS_PER_LEVEL) + 1;
-    const fromPrevious = previousRow ? levelNumber(previousRow.level) : 0;
-    return levelLabel(Math.max(fromCredits, fromPrevious));
+    return LEVEL_THRESHOLDS.find(entry => credits >= entry.minCredits).label;
   }
 
   /* CTT-SIS thường cập nhật bảng Kết quả học tập chậm hơn bảng điểm. Với các học kỳ
@@ -332,7 +333,7 @@
           accumulatedCredits: stat.recalculatedAccumulatedCredits,
           debtCredits: Math.max(0, stat.registeredCredits - stat.recalculatedAccumulatedCredits - stat.clearedDebtCredits),
           registeredCredits: stat.registeredCredits,
-          level: estimatedLevel(stat.recalculatedAccumulatedCredits, previous),
+          level: estimatedLevel(stat.recalculatedAccumulatedCredits),
           warning: reference ? reference.warning : '',
           missingScore: '',
           excluded: '',

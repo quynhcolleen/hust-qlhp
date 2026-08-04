@@ -96,7 +96,7 @@ Cách tính (đã đối chiếu khớp với toàn bộ các học kỳ do CTT-
 | TC tích lũy | Tổng tín chỉ các học phần đã đạt tính đến học kỳ đó |
 | TC ĐK | Tổng tín chỉ các mã học phần tính đến lần đăng ký đầu tiên; học lại không cộng thêm |
 | TC nợ ĐK | TC ĐK trừ TC tích lũy |
-| Trình độ | Suy ra từ tín chỉ tích lũy (32 TC mỗi năm) và không thấp hơn học kỳ liền trước |
+| Trình độ | Xếp theo TC tích lũy đúng quy chế: `< 32` năm thứ nhất, `32-63` năm thứ hai, `64-95` năm thứ ba, `96-127` năm thứ tư, `>= 128` năm thứ năm |
 | Cảnh báo | Lấy theo học kỳ liền trước vì chưa có dữ liệu chính thức |
 
 Học phần chưa có điểm chữ và học phần 0 tín chỉ (ví dụ giáo dục thể chất) không tham gia các công thức trên. Học kỳ chưa có điểm nào thì không được dựng.
