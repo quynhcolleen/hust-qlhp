@@ -18,6 +18,7 @@ Tiện ích đọc dữ liệu đang hiển thị trên các trang CTT-SIS, sau 
 - Xếp hạng bảng điểm cá nhân theo điểm tốt nhất hoặc cần chú ý nhất.
 - Hiển thị điểm chữ A+, A, B+, B, C+, C, D+, D, F/R và điểm hệ 4 tương ứng.
 - Hiển thị dashboard tổng quát cho GPA, CPA, tín chỉ qua, tín chỉ tích lũy, tín chỉ nợ đăng ký, tín chỉ đăng ký, trình độ và mức cảnh báo theo học kỳ.
+- Tự dựng lại các học kỳ mà CTT-SIS chưa cập nhật vào bảng Kết quả học tập sinh viên, dựa trên bảng điểm sinh viên.
 
 Tiện ích không hiển thị nút nổi ở trang đăng nhập CTT-SIS.
 
@@ -80,6 +81,27 @@ Việc phân loại học phần dựa trên:
 - Thông tin viện/khoa khi cần thiết.
 
 Nếu CTT-SIS thay đổi cấu trúc bảng hoặc đổi nhãn dữ liệu, phần quét và phân loại trong `content.js` có thể cần cập nhật.
+
+## Học kỳ ước tính trong dashboard tổng quát
+
+CTT-SIS thường cập nhật bảng **Kết quả học tập sinh viên** chậm hơn bảng điểm. Khi một học kỳ đã có điểm trong bảng điểm nhưng chưa có dòng kết quả tương ứng, extension tự dựng lại học kỳ đó từ bảng điểm để dashboard và các biểu đồ không bị dừng ở học kỳ cũ.
+
+Cách tính (đã đối chiếu khớp với toàn bộ các học kỳ do CTT-SIS công bố):
+
+| Chỉ số | Cách tính |
+| --- | --- |
+| GPA | Trung bình điểm hệ 4 có trọng số tín chỉ của các học phần trong học kỳ đó, tính cả điểm F |
+| CPA | Trung bình tích lũy theo cách tính của extension: lấy lần đạt tốt nhất của mỗi học phần, không tính các lần trượt |
+| TC qua | Tổng tín chỉ các học phần đạt trong học kỳ đó |
+| TC tích lũy | Tổng tín chỉ các học phần đã đạt tính đến học kỳ đó |
+| TC ĐK | Tổng tín chỉ các mã học phần tính đến lần đăng ký đầu tiên; học lại không cộng thêm |
+| TC nợ ĐK | TC ĐK trừ TC tích lũy |
+| Trình độ | Suy ra từ tín chỉ tích lũy (32 TC mỗi năm) và không thấp hơn học kỳ liền trước |
+| Cảnh báo | Lấy theo học kỳ liền trước vì chưa có dữ liệu chính thức |
+
+Học phần chưa có điểm chữ và học phần 0 tín chỉ (ví dụ giáo dục thể chất) không tham gia các công thức trên. Học kỳ chưa có điểm nào thì không được dựng.
+
+Các học kỳ dựng theo cách này được đánh dấu `ước tính` trong bảng chi tiết, gắn dấu `*` trên trục hoành của biểu đồ, và có ghi chú ngay dưới phần tổng quan. Khi CTT-SIS công bố dòng kết quả chính thức, extension dùng luôn số liệu của trường và bỏ phần ước tính.
 
 ## Cập nhật sau khi sửa code
 

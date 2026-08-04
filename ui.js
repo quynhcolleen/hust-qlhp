@@ -175,10 +175,8 @@
     return point != null && point > 0;
   }
 
-  function recalculateTermStats(generalRows, markRows) {
-    const terms = Array.from(new Set(generalRows.map(row => row.term).filter(Boolean)))
-      .sort((a, b) => String(a).localeCompare(String(b)));
-    const marks = markRows
+  function gradedMarkRows(markRows) {
+    return markRows
       .filter(row => /^\d{5}$/.test(String(row.term || '')) && row.credit > 0 && normalizeCourseCode(row.code))
       .map(row => ({
         ...row,
@@ -186,13 +184,23 @@
         point: gradePoint(row.letterGrade),
       }))
       .filter(row => row.point != null);
+  }
 
+  function recalculateTermStats(terms, marks) {
     const latestPassTermByCode = new Map();
     marks.forEach(row => {
       if (!isPassingGrade(row.letterGrade)) return;
       const current = latestPassTermByCode.get(row.code);
       if (!current || String(row.term).localeCompare(String(current)) > 0) {
         latestPassTermByCode.set(row.code, row.term);
+      }
+    });
+
+    const firstRegistrationByCode = new Map();
+    marks.forEach(row => {
+      const current = firstRegistrationByCode.get(row.code);
+      if (!current || String(row.term).localeCompare(String(current.term)) < 0) {
+        firstRegistrationByCode.set(row.code, { term: row.term, credit: row.credit });
       }
     });
 
@@ -227,11 +235,30 @@
         clearedDebtCredits.set(row.code, Math.max(clearedDebtCredits.get(row.code) || 0, row.credit));
       });
 
+      let termCredits = 0;
+      let termWeightedPoints = 0;
+      let termPassedCredits = 0;
+      marks.forEach(row => {
+        if (String(row.term) !== String(term)) return;
+        termCredits += row.credit;
+        termWeightedPoints += row.credit * row.point;
+        if (row.point > 0) termPassedCredits += row.credit;
+      });
+
+      let registeredCredits = 0;
+      firstRegistrationByCode.forEach(entry => {
+        if (String(entry.term).localeCompare(String(term)) <= 0) registeredCredits += entry.credit;
+      });
+
       const clearedDebt = Array.from(clearedDebtCredits.values()).reduce((sum, credit) => sum + credit, 0);
       stats.set(term, {
         recalculatedCpa: accumulatedCredits ? weightedPoints / accumulatedCredits : null,
         recalculatedAccumulatedCredits: accumulatedCredits,
         clearedDebtCredits: clearedDebt,
+        termGpa: termCredits ? termWeightedPoints / termCredits : null,
+        termPassedCredits,
+        registeredCredits,
+        hasMarks: termCredits > 0,
       });
     });
 
@@ -269,23 +296,83 @@
     });
   }
 
+  const LEVEL_LABELS = ['', 'Năm thứ nhất', 'Năm thứ hai', 'Năm thứ ba', 'Năm thứ tư', 'Năm thứ năm'];
+  const CREDITS_PER_LEVEL = 32;
+
+  function levelLabel(level) {
+    return LEVEL_LABELS[Math.min(LEVEL_LABELS.length - 1, Math.max(1, level))];
+  }
+
+  function estimatedLevel(accumulatedCredits, previousRow) {
+    const credits = safeNumber(accumulatedCredits) ?? 0;
+    const fromCredits = Math.floor(credits / CREDITS_PER_LEVEL) + 1;
+    const fromPrevious = previousRow ? levelNumber(previousRow.level) : 0;
+    return levelLabel(Math.max(fromCredits, fromPrevious));
+  }
+
+  /* CTT-SIS thường cập nhật bảng Kết quả học tập chậm hơn bảng điểm. Với các học kỳ
+     đã có điểm nhưng chưa có dòng kết quả, dựng lại số liệu học kỳ từ bảng điểm. */
+  function estimatedGeneralRows(generalRows, stats, markTerms) {
+    const knownTerms = new Set(generalRows.map(row => row.term));
+    const ordered = generalRows.slice().sort((a, b) => String(a.term).localeCompare(String(b.term)));
+    const estimated = [];
+
+    markTerms
+      .filter(term => !knownTerms.has(term))
+      .forEach(term => {
+        const stat = stats.get(term);
+        if (!stat || !stat.hasMarks) return;
+        const previous = ordered.filter(row => String(row.term).localeCompare(String(term)) < 0).pop();
+        const reference = previous || ordered.find(row => String(row.term).localeCompare(String(term)) > 0) || null;
+        estimated.push({
+          term,
+          gpa: stat.termGpa,
+          cpa: stat.recalculatedCpa,
+          passedCredits: stat.termPassedCredits,
+          accumulatedCredits: stat.recalculatedAccumulatedCredits,
+          debtCredits: Math.max(0, stat.registeredCredits - stat.recalculatedAccumulatedCredits - stat.clearedDebtCredits),
+          registeredCredits: stat.registeredCredits,
+          level: estimatedLevel(stat.recalculatedAccumulatedCredits, previous),
+          warning: reference ? reference.warning : '',
+          missingScore: '',
+          excluded: '',
+          program: reference ? reference.program : '',
+          expectedHandling: '',
+          officialHandling: '',
+          estimated: true,
+        });
+      });
+
+    return estimated;
+  }
+
   function applyRecalculatedGeneralRows(generalRows, markRows) {
-    if (!generalRows.length || !markRows.length) return generalRows;
-    const stats = recalculateTermStats(generalRows, markRows);
-    return generalRows.map(row => {
-      const stat = stats.get(row.term);
-      if (!stat) return row;
-      return {
-        ...row,
-        rawCpa: row.cpa,
-        rawAccumulatedCredits: row.accumulatedCredits,
-        rawDebtCredits: row.debtCredits,
-        cpa: stat.recalculatedCpa,
-        accumulatedCredits: stat.recalculatedAccumulatedCredits,
-        debtCredits: Math.max(0, (safeNumber(row.debtCredits) ?? 0) - stat.clearedDebtCredits),
-        clearedDebtCredits: stat.clearedDebtCredits,
-      };
-    });
+    const marks = gradedMarkRows(markRows);
+    if (!marks.length) return generalRows;
+
+    const markTerms = Array.from(new Set(marks.map(row => row.term)))
+      .sort((a, b) => String(a).localeCompare(String(b)));
+    const terms = Array.from(new Set(generalRows.map(row => row.term).filter(Boolean).concat(markTerms)))
+      .sort((a, b) => String(a).localeCompare(String(b)));
+    const stats = recalculateTermStats(terms, marks);
+
+    return generalRows
+      .map(row => {
+        const stat = stats.get(row.term);
+        if (!stat) return row;
+        return {
+          ...row,
+          rawCpa: row.cpa,
+          rawAccumulatedCredits: row.accumulatedCredits,
+          rawDebtCredits: row.debtCredits,
+          cpa: stat.recalculatedCpa,
+          accumulatedCredits: stat.recalculatedAccumulatedCredits,
+          debtCredits: Math.max(0, (safeNumber(row.debtCredits) ?? 0) - stat.clearedDebtCredits),
+          clearedDebtCredits: stat.clearedDebtCredits,
+        };
+      })
+      .concat(estimatedGeneralRows(generalRows, stats, markTerms))
+      .sort((a, b) => String(b.term).localeCompare(String(a.term)));
   }
 
   function arcPath(cx, cy, r, a0, a1) {
@@ -338,9 +425,14 @@
 
   function levelNumber(value) {
     const text = String(value || '').toLowerCase();
-    if (/ba|3/.test(text)) return 3;
-    if (/hai|2/.test(text)) return 2;
-    if (/nhất|mot|một|1/.test(text)) return 1;
+    const tail = text.split('thứ').pop().trim();
+    const digit = tail.match(/^\d/);
+    if (digit) return Number(digit[0]);
+    if (/^năm|^nam\b/.test(tail)) return 5;
+    if (/^tư|^tu\b/.test(tail)) return 4;
+    if (/^ba/.test(tail)) return 3;
+    if (/^hai/.test(tail)) return 2;
+    if (/^nhất|^nhat|^một|^mot/.test(tail)) return 1;
     return 0;
   }
 
@@ -352,6 +444,14 @@
     return rows.slice().sort((a, b) => String(b.term).localeCompare(String(a.term)));
   }
 
+  function termTooltipLabel(row) {
+    return row.estimated ? `${row.term} (ước tính)` : row.term;
+  }
+
+  function termAxisLabel(row, x, height) {
+    return `<text x="${x}" y="${height - 8}" text-anchor="middle" class="${row.estimated ? 'term-estimated' : ''}">${escapeHTML(row.term)}${row.estimated ? '*' : ''}</text>`;
+  }
+
   function chartPoints(rows, key, min, max, width, height, pad) {
     const denom = Math.max(1, max - min);
     const count = Math.max(1, rows.length - 1);
@@ -359,7 +459,7 @@
       const value = safeNumber(row[key]) ?? min;
       const x = pad + (width - pad * 2) * (index / count);
       const y = height - pad - ((value - min) / denom) * (height - pad * 2);
-      return { x, y, value, term: row.term };
+      return { x, y, value, term: row.term, label: termTooltipLabel(row) };
     });
   }
 
@@ -374,7 +474,7 @@
     const polyline = points => points.map(p => `${p.x},${p.y}`).join(' ');
     const labels = ordered.map((row, index) => {
       const x = pad + (width - pad * 2) * (index / Math.max(1, ordered.length - 1));
-      return `<text x="${x}" y="${height - 8}" text-anchor="middle">${escapeHTML(row.term)}</text>`;
+      return termAxisLabel(row, x, height);
     }).join('');
 
     return `<svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ GPA và CPA theo học kỳ">
@@ -384,8 +484,8 @@
       <text x="8" y="${height - pad}" class="chart-label">0</text>
       <polyline points="${polyline(gpa)}" class="chart-line chart-line-gpa"/>
       <polyline points="${polyline(cpa)}" class="chart-line chart-line-cpa"/>
-      ${gpa.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-gpa" data-tooltip="${tooltipText([p.term, `GPA: ${valueText(p.value)}`, `CPA: ${valueText(ordered[index].cpa)}`])}"></circle>`).join('')}
-      ${cpa.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-cpa" data-tooltip="${tooltipText([p.term, `CPA: ${valueText(p.value)}`, `GPA: ${valueText(ordered[index].gpa)}`])}"></circle>`).join('')}
+      ${gpa.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-gpa" data-tooltip="${tooltipText([p.label, `GPA: ${valueText(p.value)}`, `CPA: ${valueText(ordered[index].cpa)}`])}"></circle>`).join('')}
+      ${cpa.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-cpa" data-tooltip="${tooltipText([p.label, `CPA: ${valueText(p.value)}`, `GPA: ${valueText(ordered[index].gpa)}`])}"></circle>`).join('')}
       ${labels}
     </svg>
     <div class="chart-legend"><span class="legend-gpa">GPA</span><span class="legend-cpa">CPA</span></div>`;
@@ -410,9 +510,9 @@
       const passedH = (passed / maxValue) * (height - pad * 2);
       const debtH = (debt / maxValue) * (height - pad * 2);
       return `
-        <rect x="${x - barW - 2}" y="${height - pad - passedH}" width="${barW}" height="${passedH}" class="chart-bar chart-bar-passed chart-mark" data-tooltip="${tooltipText([row.term, `TC qua: ${valueText(passed)}`, `TC nợ ĐK: ${valueText(debt)}`])}"></rect>
-        <rect x="${x + 2}" y="${height - pad - debtH}" width="${barW}" height="${debtH}" class="chart-bar chart-bar-debt chart-mark" data-tooltip="${tooltipText([row.term, `TC nợ ĐK: ${valueText(debt)}`, `TC qua: ${valueText(passed)}`])}"></rect>
-        <text x="${x}" y="${height - 8}" text-anchor="middle">${escapeHTML(row.term)}</text>
+        <rect x="${x - barW - 2}" y="${height - pad - passedH}" width="${barW}" height="${passedH}" class="chart-bar chart-bar-passed chart-mark" data-tooltip="${tooltipText([termTooltipLabel(row), `TC qua: ${valueText(passed)}`, `TC nợ ĐK: ${valueText(debt)}`])}"></rect>
+        <rect x="${x + 2}" y="${height - pad - debtH}" width="${barW}" height="${debtH}" class="chart-bar chart-bar-debt chart-mark" data-tooltip="${tooltipText([termTooltipLabel(row), `TC nợ ĐK: ${valueText(debt)}`, `TC qua: ${valueText(passed)}`])}"></rect>
+        ${termAxisLabel(row, x, height)}
       `;
     }).join('');
 
@@ -441,7 +541,7 @@
     const polyline = points => points.map(p => `${p.x},${p.y}`).join(' ');
     const labels = ordered.map((row, index) => {
       const x = pad + (width - pad * 2) * (index / Math.max(1, ordered.length - 1));
-      return `<text x="${x}" y="${height - 8}" text-anchor="middle">${escapeHTML(row.term)}</text>`;
+      return termAxisLabel(row, x, height);
     }).join('');
 
     return `<svg class="trend-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ tín chỉ tích lũy">
@@ -451,8 +551,8 @@
       <text x="8" y="${height - pad}" class="chart-label">0</text>
       <polyline points="${polyline(accumulated)}" class="chart-line chart-line-cpa"/>
       <polyline points="${polyline(registered)}" class="chart-line chart-line-registered"/>
-      ${accumulated.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-cpa" data-tooltip="${tooltipText([p.term, `TC tích lũy: ${valueText(p.value)}`, `TC ĐK: ${valueText(ordered[index].registeredCredits)}`])}"></circle>`).join('')}
-      ${registered.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-registered" data-tooltip="${tooltipText([p.term, `TC ĐK: ${valueText(p.value)}`, `TC tích lũy: ${valueText(ordered[index].accumulatedCredits)}`])}"></circle>`).join('')}
+      ${accumulated.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-cpa" data-tooltip="${tooltipText([p.label, `TC tích lũy: ${valueText(p.value)}`, `TC ĐK: ${valueText(ordered[index].registeredCredits)}`])}"></circle>`).join('')}
+      ${registered.map((p, index) => `<circle cx="${p.x}" cy="${p.y}" r="4" class="chart-dot chart-dot-registered" data-tooltip="${tooltipText([p.label, `TC ĐK: ${valueText(p.value)}`, `TC tích lũy: ${valueText(ordered[index].accumulatedCredits)}`])}"></circle>`).join('')}
       ${labels}
     </svg>
     <div class="chart-legend"><span class="legend-cpa">TC tích lũy</span><span class="legend-registered">TC ĐK</span></div>`;
@@ -465,17 +565,22 @@
     const height = 260;
     const pad = 44;
     const count = Math.max(1, ordered.length - 1);
+    const maxLevel = Math.max(3, ...ordered.map(row => Math.max(
+      levelNumber(row.level),
+      warningLevel(row.warning) ?? 0
+    )));
+    const plot = (level, index) => {
+      const x = pad + (width - pad * 2) * (index / count);
+      const y = height - pad - (Math.min(maxLevel, Math.max(0, level)) / maxLevel) * (height - pad * 2);
+      return { x, y };
+    };
     const levelPoints = ordered.map((row, index) => {
       const level = levelNumber(row.level);
-      const x = pad + (width - pad * 2) * (index / count);
-      const y = height - pad - (Math.min(3, Math.max(0, level)) / 3) * (height - pad * 2);
-      return { x, y, level, row };
+      return { ...plot(level, index), level, row };
     });
     const warningPoints = ordered.map((row, index) => {
       const level = warningLevel(row.warning) ?? 0;
-      const x = pad + (width - pad * 2) * (index / count);
-      const y = height - pad - (Math.min(3, Math.max(0, level)) / 3) * (height - pad * 2);
-      return { x, y, level, row };
+      return { ...plot(level, index), level, row };
     });
     const levelLine = levelPoints.map(p => `${p.x},${p.y}`).join(' ');
     const warningLine = warningPoints.map(p => `${p.x},${p.y}`).join(' ');
@@ -483,15 +588,15 @@
     return `<svg class="trend-chart status-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Biểu đồ trình độ và cảnh báo theo học kỳ">
       <line x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}" class="chart-axis"/>
       <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}" class="chart-axis"/>
-      ${[0, 1, 2, 3].map(level => {
-        const y = height - pad - (level / 3) * (height - pad * 2);
+      ${Array.from({ length: maxLevel + 1 }, (_, level) => {
+        const y = height - pad - (level / maxLevel) * (height - pad * 2);
         return `<line x1="${pad}" y1="${y}" x2="${width - pad}" y2="${y}" class="chart-grid-line"/><text x="10" y="${y + 4}" class="chart-label">${level}</text>`;
       }).join('')}
       <polyline points="${levelLine}" class="chart-line chart-line-level"/>
       <polyline points="${warningLine}" class="chart-line chart-line-warning"/>
-      ${levelPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" class="chart-dot chart-dot-level" data-tooltip="${tooltipText([p.row.term, `Trình độ: ${p.row.level || '-'}`, `Cảnh báo: ${p.row.warning || '-'}`])}"></circle>`).join('')}
-      ${warningPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" class="chart-dot ${warningClass(p.row.warning)}" data-tooltip="${tooltipText([p.row.term, `Cảnh báo: ${p.row.warning || '-'}`, `Trình độ: ${p.row.level || '-'}`])}"></circle>`).join('')}
-      ${levelPoints.map(p => `<text x="${p.x}" y="${height - 8}" text-anchor="middle">${escapeHTML(p.row.term)}</text>`).join('')}
+      ${levelPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" class="chart-dot chart-dot-level" data-tooltip="${tooltipText([termTooltipLabel(p.row), `Trình độ: ${p.row.level || '-'}`, `Cảnh báo: ${p.row.warning || '-'}`])}"></circle>`).join('')}
+      ${warningPoints.map(p => `<circle cx="${p.x}" cy="${p.y}" r="5" class="chart-dot ${warningClass(p.row.warning)}" data-tooltip="${tooltipText([termTooltipLabel(p.row), `Cảnh báo: ${p.row.warning || '-'}`, `Trình độ: ${p.row.level || '-'}`])}"></circle>`).join('')}
+      ${levelPoints.map(p => termAxisLabel(p.row, p.x, height)).join('')}
     </svg>
     <div class="chart-legend"><span class="legend-level">Trình độ</span><span class="legend-good">Mức 0</span><span class="legend-registered">Mức 1-2</span><span class="legend-gpa">Mức 3+</span></div>`;
   }
@@ -755,8 +860,16 @@
 
   function fillGeneral(rows) {
     const latest = latestTermRows(rows)[0];
+    const estimatedTerms = rows.filter(row => row.estimated).map(row => row.term).sort();
     setText('generalCount', `${rows.length} học kỳ`);
     setText('latestTerm', latest ? latest.term : '-');
+    const estimateNote = shadow.getElementById('generalEstimateNote');
+    if (estimateNote) {
+      estimateNote.textContent = estimatedTerms.length
+        ? `* Học kỳ ${estimatedTerms.join(', ')} chưa có trong bảng Kết quả học tập, số liệu được tính lại từ bảng điểm sinh viên. Mức cảnh báo lấy theo học kỳ liền trước.`
+        : '';
+      estimateNote.classList.toggle('is-hidden', !estimatedTerms.length);
+    }
     setText('latestCpa', latest ? valueText(latest.cpa) : '-');
     setText('latestAccumulatedCredits', latest ? valueText(latest.accumulatedCredits) : '-');
     setText('latestWarning', latest && latest.warning ? latest.warning : '-');
@@ -769,8 +882,8 @@
     shadow.getElementById('cumulativeCreditChart').innerHTML = cumulativeCreditChartSVG(rows);
     shadow.getElementById('statusTimeline').innerHTML = statusTimelineSVG(rows);
     shadow.getElementById('generalBody').innerHTML = latestTermRows(rows).map(row => `
-      <tr>
-        <td class="grade-cell">${escapeHTML(row.term)}</td>
+      <tr class="${row.estimated ? 'is-estimated' : ''}">
+        <td class="grade-cell">${escapeHTML(row.term)}${row.estimated ? '<span class="estimate-chip" title="Tính lại từ bảng điểm sinh viên">ước tính</span>' : ''}</td>
         <td class="grade-cell">${valueText(row.gpa)}</td>
         <td class="grade-cell">${valueText(row.cpa)}</td>
         <td class="credit">${valueText(row.passedCredits)}</td>
