@@ -27,7 +27,7 @@ Tiện ích không hiển thị nút nổi ở trang đăng nhập CTT-SIS.
 1. Tải source code về máy bằng một trong hai cách:
 
 ```bash
-git clone https://github.com/quynhcolleen/hust-dghp.git
+git clone https://github.com/quynhcolleen/hust-qlhp.git
 ```
 
 Hoặc tải ZIP từ GitHub rồi giải nén.
