@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  const CODE_RE = /^[A-Z]{2,5}\d{3,5}$/;
+  const CODE_RE = /^[A-Z]{2,5}\d{3,5}[A-Z]{0,2}$/;
   const SHOW_PROGRAM_BUTTON_ID =
     "ctl00_ctl00_contentPane_MainPanel_MainContent_btShowProgramCourse";
   const LOGIN_PATH = "/Account/Login.aspx";
